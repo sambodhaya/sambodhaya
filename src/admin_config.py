@@ -127,3 +127,65 @@ config = {
 
 (root / "admin" / "config.yml").write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 print("wrote admin/config.yml")
+
+
+# ---- The same forms for Pages CMS (app.pagescms.org), where editors sign in with only their email ----
+# Editors are invited by email in Pages CMS (no GitHub account needed); each save is a commit on GitHub as before.
+# settings.content.merge keeps the keys the forms don't show (Pages CMS would otherwise drop them).
+FIXED = {"media": 4, "garden_stones": 4, "pictures": 8}  # lists with a fixed number of items (a board each, …)
+
+
+def pages_field(f):
+    w = f["widget"]
+    out = {"name": f["name"], "label": f["label"]}
+    if w == "list":
+        inner = pages_field(f["field"]) if "field" in f else {"type": "object", "fields": [pages_field(x) for x in f["fields"]]}
+        out.update({k: v for k, v in inner.items() if k not in ("name", "label")})
+        lst = {"collapsible": True}
+        summary = f.get("summary", "")
+        if summary and "." not in summary.replace("fields.", "", 1) and summary.count("{{") == 1:
+            lst["collapsible"] = {"collapsed": True, "summary": summary.replace("{{", "{").replace("}}", "}")}
+        if f["name"] in FIXED:
+            lst["min"] = lst["max"] = FIXED[f["name"]]
+        out["list"] = lst
+    elif w == "object":
+        out.update({"type": "object", "fields": [pages_field(x) for x in f["fields"]]})
+    else:
+        out["type"] = {"string": "string", "text": "text", "boolean": "boolean", "number": "number"}[w]
+        if w == "number" and "min" in f:
+            out["options"] = {"min": f["min"]}
+    if f.get("hint"):
+        out["description"] = f["hint"]
+    if f.get("required") is True:
+        out["required"] = True
+    if f["name"] == "code":
+        out["readonly"] = True  # the site and the 3D temple find a lesson by it
+    return out
+
+
+def pages_file(f):
+    return {"name": f["name"], "label": f["label"], "type": "file", "path": f["file"], "format": "json",
+            "fields": [pages_field(x) for x in f["fields"]]}
+
+
+lessons, temple, library = config["collections"]
+pages = {
+    "media": {"input": "img/uploads", "output": "/img/uploads"},
+    "settings": {"content": {"merge": True},
+                 "commit": {"templates": {"update": "Update {path} by {userName} (via Pages CMS)"}}},
+    "content": [
+        {"name": "lessons", "label": "Lessons", "type": "collection", "path": "content/lessons", "format": "json",
+         "filename": {"template": "{fields.code}.json", "field": False},
+         "operations": {"create": False, "rename": False, "delete": False},
+         "view": {"primary": "code", "fields": ["code", "status"], "sort": ["code"]},
+         "fields": [pages_field(x) for x in lesson_fields]},
+        {"name": "temple", "label": temple["label"], "type": "group", "items": [pages_file(f) for f in temple["files"]]},
+        {"name": "library", "label": library["label"], "type": "group", "items": [pages_file(f) for f in library["files"]]},
+    ],
+}
+for item in pages["content"][1:]:
+    for f in item["items"]:
+        f["operations"] = {"create": False, "rename": False, "delete": False}
+(root / ".pages.yml").write_text("# Written by src/admin_config.py: the Pages CMS forms (JSON is also valid YAML). Edit there, not here.\n"
+                                 + json.dumps(pages, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+print("wrote .pages.yml")

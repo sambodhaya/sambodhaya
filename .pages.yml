@@ -1,0 +1,2541 @@
+# Written by src/admin_config.py: the Pages CMS forms (JSON is also valid YAML). Edit there, not here.
+{
+  "media": {
+    "input": "img/uploads",
+    "output": "/img/uploads"
+  },
+  "settings": {
+    "content": {
+      "merge": true
+    },
+    "commit": {
+      "templates": {
+        "update": "Update {path} by {userName} (via Pages CMS)"
+      }
+    }
+  },
+  "content": [
+    {
+      "name": "lessons",
+      "label": "Lessons",
+      "type": "collection",
+      "path": "content/lessons",
+      "format": "json",
+      "filename": {
+        "template": "{fields.code}.json",
+        "field": false
+      },
+      "operations": {
+        "create": false,
+        "rename": false,
+        "delete": false
+      },
+      "view": {
+        "primary": "code",
+        "fields": [
+          "code",
+          "status"
+        ],
+        "sort": [
+          "code"
+        ]
+      },
+      "fields": [
+        {
+          "name": "code",
+          "label": "Code",
+          "type": "string",
+          "description": "U01–U08. Don't change it: the site and the 3D temple find the lesson by it.",
+          "required": true,
+          "readonly": true
+        },
+        {
+          "name": "status",
+          "label": "Status",
+          "type": "string",
+          "description": "The Library's checking status, e.g. CHILD COPY v1 READY / HUMAN COMPREHENSION TEST OPEN",
+          "required": true
+        },
+        {
+          "name": "title",
+          "label": "Title",
+          "type": "object",
+          "fields": [
+            {
+              "name": "th",
+              "label": "ไทย · Thai",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "en",
+              "label": "English",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "required": true
+        },
+        {
+          "name": "question",
+          "label": "Question",
+          "type": "object",
+          "fields": [
+            {
+              "name": "th",
+              "label": "ไทย · Thai",
+              "type": "string"
+            },
+            {
+              "name": "en",
+              "label": "English",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "name": "simple",
+          "label": "The story, simply told",
+          "type": "object",
+          "fields": [
+            {
+              "name": "th",
+              "label": "ไทย · Thai",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "en",
+              "label": "English",
+              "type": "text",
+              "required": true
+            }
+          ],
+          "required": true
+        },
+        {
+          "name": "life",
+          "label": "In everyday life",
+          "type": "object",
+          "fields": [
+            {
+              "name": "th",
+              "label": "ไทย · Thai",
+              "type": "text"
+            },
+            {
+              "name": "en",
+              "label": "English",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "name": "uncertainty",
+          "label": "What we don't know",
+          "type": "object",
+          "fields": [
+            {
+              "name": "th",
+              "label": "ไทย · Thai",
+              "type": "text"
+            },
+            {
+              "name": "en",
+              "label": "English",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "name": "safety",
+          "label": "Safety note",
+          "type": "object",
+          "fields": [
+            {
+              "name": "th",
+              "label": "ไทย · Thai",
+              "type": "text"
+            },
+            {
+              "name": "en",
+              "label": "English",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "name": "boundary",
+          "label": "Boundary (what the source does not say)",
+          "type": "object",
+          "fields": [
+            {
+              "name": "th",
+              "label": "ไทย · Thai",
+              "type": "text"
+            },
+            {
+              "name": "en",
+              "label": "English",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "name": "evidenceNote",
+          "label": "Note on the evidence",
+          "type": "object",
+          "fields": [
+            {
+              "name": "th",
+              "label": "ไทย · Thai",
+              "type": "text"
+            },
+            {
+              "name": "en",
+              "label": "English",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "name": "translationNote",
+          "label": "Note on the translation",
+          "type": "object",
+          "fields": [
+            {
+              "name": "th",
+              "label": "ไทย · Thai",
+              "type": "text"
+            },
+            {
+              "name": "en",
+              "label": "English",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "name": "phrase",
+          "label": "Pali phrase",
+          "type": "string"
+        },
+        {
+          "name": "media",
+          "label": "Show the wheel image with this lesson",
+          "type": "boolean"
+        },
+        {
+          "name": "sources",
+          "label": "Sources",
+          "type": "object",
+          "fields": [
+            {
+              "name": "key",
+              "label": "Source key",
+              "type": "string",
+              "description": "A key from Library → Sources, e.g. MN26",
+              "required": true
+            },
+            {
+              "name": "use",
+              "label": "How it is used",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "list": {
+            "collapsible": {
+              "collapsed": true,
+              "summary": "{fields.key}"
+            }
+          }
+        },
+        {
+          "name": "exercises",
+          "label": "Exercises",
+          "type": "object",
+          "fields": [
+            {
+              "name": "q",
+              "label": "Question",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "o",
+              "label": "Answer options",
+              "type": "string",
+              "list": {
+                "collapsible": true
+              }
+            },
+            {
+              "name": "a",
+              "label": "Right answer",
+              "type": "number",
+              "options": {
+                "min": 0
+              },
+              "description": "Counted from 0: 0 = the first option, 1 = the second, …"
+            },
+            {
+              "name": "feedback",
+              "label": "Feedback after answering",
+              "type": "text"
+            },
+            {
+              "name": "evidence",
+              "label": "Evidence",
+              "type": "string"
+            },
+            {
+              "name": "note",
+              "label": "Note",
+              "type": "text"
+            },
+            {
+              "name": "rule",
+              "label": "Rule",
+              "type": "text"
+            },
+            {
+              "name": "challenge",
+              "label": "Challenge",
+              "type": "text"
+            }
+          ],
+          "list": {
+            "collapsible": {
+              "collapsed": true,
+              "summary": "{fields.q}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "temple",
+      "label": "Temple (3D)",
+      "type": "group",
+      "items": [
+        {
+          "name": "places",
+          "label": "Hall names & subtitles",
+          "type": "file",
+          "path": "content/world/places.json",
+          "format": "json",
+          "fields": [
+            {
+              "name": "yard",
+              "label": "Central Courtyard",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "name",
+                  "label": "Name",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "sub",
+                  "label": "Subtitle",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "library",
+              "label": "Evidence Library",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "name",
+                  "label": "Name",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "sub",
+                  "label": "Subtitle",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "learn",
+              "label": "Learning Hall",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "name",
+                  "label": "Name",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "sub",
+                  "label": "Subtitle",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "media",
+              "label": "Media Hall",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "name",
+                  "label": "Name",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "sub",
+                  "label": "Subtitle",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "access",
+              "label": "Universal Hall",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "name",
+                  "label": "Name",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "sub",
+                  "label": "Subtitle",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "rest",
+              "label": "Rest Area",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "name",
+                  "label": "Name",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "sub",
+                  "label": "Subtitle",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "care",
+              "label": "Caretaker & temple dog",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "name",
+                  "label": "Name",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "sub",
+                  "label": "Subtitle",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "garden",
+              "label": "Practice Garden",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "name",
+                  "label": "Name",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "sub",
+                  "label": "Subtitle",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "journey",
+              "label": "My Journey",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "name",
+                  "label": "Name",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "sub",
+                  "label": "Subtitle",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "exit",
+              "label": "Exit gate",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "name",
+                  "label": "Name",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "sub",
+                  "label": "Subtitle",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            }
+          ],
+          "operations": {
+            "create": false,
+            "rename": false,
+            "delete": false
+          }
+        },
+        {
+          "name": "signs",
+          "label": "Signs",
+          "type": "file",
+          "path": "content/world/signs.json",
+          "format": "json",
+          "fields": [
+            {
+              "name": "gate",
+              "label": "The entrance gate",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "title",
+                  "label": "Title",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "sub",
+                  "label": "Subtitle",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "welcome",
+              "label": "Left gate post",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "th",
+                  "label": "ไทย · Thai",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "en",
+                  "label": "English",
+                  "type": "string",
+                  "required": true
+                }
+              ],
+              "required": true
+            },
+            {
+              "name": "leave",
+              "label": "Right gate post",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "th",
+                  "label": "ไทย · Thai",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "en",
+                  "label": "English",
+                  "type": "string",
+                  "required": true
+                }
+              ],
+              "required": true
+            },
+            {
+              "name": "tool_rack",
+              "label": "The tool rack",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "title",
+                  "label": "Title",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "sub",
+                  "label": "Subtitle",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "donation_box",
+              "label": "The donation box (by the right gate post)",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "title",
+                  "label": "Title",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "sub",
+                  "label": "Subtitle",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "community",
+              "label": "LINE OpenChat (gate page footer, support page, left gate post)",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "title",
+                  "label": "Button / sign title",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "sub",
+                  "label": "Subtitle",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "url",
+                  "label": "LINE OpenChat link",
+                  "type": "string",
+                  "description": "The invitation link from LINE, starting https://line.me/ (the part from ? on can be left off)",
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "garden_stones",
+              "label": "Practice Garden: the four stones",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "name",
+                  "label": "Name",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ],
+              "list": {
+                "collapsible": true,
+                "min": 4,
+                "max": 4
+              }
+            }
+          ],
+          "operations": {
+            "create": false,
+            "rename": false,
+            "delete": false
+          }
+        },
+        {
+          "name": "boards",
+          "label": "Hall boards",
+          "type": "file",
+          "path": "content/world/boards.json",
+          "format": "json",
+          "fields": [
+            {
+              "name": "learn_story",
+              "label": "Learning Hall: the story boards",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "head",
+                  "label": "Heading (the number follows)",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "foot",
+                  "label": "Footnote",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "library",
+              "label": "Evidence Library: the back wall",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "head",
+                  "label": "Heading",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "title",
+                  "label": "Title",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "foot",
+                  "label": "Footnote",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "media",
+              "label": "Media Hall: the four boards",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "title",
+                  "label": "Title",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "foot",
+                  "label": "Footnote",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string"
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string"
+                    }
+                  ]
+                }
+              ],
+              "list": {
+                "collapsible": true,
+                "min": 4,
+                "max": 4
+              }
+            },
+            {
+              "name": "universal",
+              "label": "Universal Hall: the side wall",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "head",
+                  "label": "Heading",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "title",
+                  "label": "Title",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "foot",
+                  "label": "Footnote",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "care",
+              "label": "Caretaker's hall: the back wall",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "head",
+                  "label": "Heading",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "title",
+                  "label": "Title",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            }
+          ],
+          "operations": {
+            "create": false,
+            "rename": false,
+            "delete": false
+          }
+        },
+        {
+          "name": "cards",
+          "label": "Info cards",
+          "type": "file",
+          "path": "content/world/cards.json",
+          "format": "json",
+          "fields": [
+            {
+              "name": "bodhi",
+              "label": "The Bodhi tree",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "title",
+                  "label": "Title",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "text",
+                  "label": "Text",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "text",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "text",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "yaksha",
+              "label": "The guardian giants",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "title",
+                  "label": "Title",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "text",
+                  "label": "Text",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "text",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "text",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "naga",
+              "label": "The naga",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "title",
+                  "label": "Title",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "text",
+                  "label": "Text",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "text",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "text",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "bell",
+              "label": "The bell",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "title",
+                  "label": "Title",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "text",
+                  "label": "Text",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "text",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "text",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "lotus",
+              "label": "The lotus",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "title",
+                  "label": "Title",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "text",
+                  "label": "Text",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "text",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "text",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "bigbuddha",
+              "label": "The great Buddha image",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "title",
+                  "label": "Title",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "text",
+                  "label": "Text",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "text",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "text",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "buddha",
+              "label": "The main Buddha image",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "title",
+                  "label": "Title",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "text",
+                  "label": "Text",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "text",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "text",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "emerald",
+              "label": "The emerald-green Buddha image",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "title",
+                  "label": "Title",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "text",
+                  "label": "Text",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "text",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "text",
+                      "required": true
+                    }
+                  ],
+                  "description": "In the Emerald Buddha card, {season} is filled in with the current season.",
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "altar",
+              "label": "The altar",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "title",
+                  "label": "Title",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "text",
+                  "label": "Text",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "text",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "text",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "phanphum",
+              "label": "The phan phum",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "title",
+                  "label": "Title",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "text",
+                  "label": "Text",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "text",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "text",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "kathin",
+              "label": "The Kathina gifts",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "title",
+                  "label": "Title",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "text",
+                  "label": "Text",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "text",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "text",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "cushion",
+              "label": "The triangle cushion",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "title",
+                  "label": "Title",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "text",
+                  "label": "Text",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "text",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "text",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "holywater",
+              "label": "The holy water and the whisk",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "title",
+                  "label": "Title",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "text",
+                  "label": "Text",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "text",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "text",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "lanterns",
+              "label": "The Loy Krathong lanterns",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "title",
+                  "label": "Title",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "text",
+                  "label": "Text",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "text",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "text",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "krathong",
+              "label": "Loy Krathong",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "title",
+                  "label": "Title",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "text",
+                  "label": "Text",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "text",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "text",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "wiantian",
+              "label": "The candle procession",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "title",
+                  "label": "Title",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "text",
+                  "label": "Text",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "text",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "text",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "bowl",
+              "label": "The alms bowl",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "icon",
+                  "label": "Icon (one emoji)",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "title",
+                  "label": "Title",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "string",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "text",
+                  "label": "Text",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "text",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "text",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                }
+              ]
+            }
+          ],
+          "operations": {
+            "create": false,
+            "rename": false,
+            "delete": false
+          }
+        },
+        {
+          "name": "stories",
+          "label": "Story paintings (descriptions)",
+          "type": "file",
+          "path": "content/world/stories.json",
+          "format": "json",
+          "fields": [
+            {
+              "name": "pictures",
+              "label": "What each painting shows (U01–U08, in order)",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "th",
+                  "label": "ไทย · Thai",
+                  "type": "text",
+                  "required": true
+                },
+                {
+                  "name": "en",
+                  "label": "English",
+                  "type": "text",
+                  "required": true
+                }
+              ],
+              "list": {
+                "collapsible": {
+                  "collapsed": true,
+                  "summary": "{fields.en}"
+                },
+                "min": 8,
+                "max": 8
+              }
+            }
+          ],
+          "operations": {
+            "create": false,
+            "rename": false,
+            "delete": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "library",
+      "label": "Library",
+      "type": "group",
+      "items": [
+        {
+          "name": "sources",
+          "label": "Sources",
+          "type": "file",
+          "path": "content/sources.json",
+          "format": "json",
+          "fields": [
+            {
+              "name": "sources",
+              "label": "Source identifiers",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "key",
+                  "label": "Key",
+                  "type": "string",
+                  "description": "What lessons use to point here, e.g. MN26. Don't rename a key a lesson uses.",
+                  "required": true
+                },
+                {
+                  "name": "id",
+                  "label": "Reference",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "pali",
+                  "label": "Pali title",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "th",
+                  "label": "Thai title",
+                  "type": "string",
+                  "required": true
+                }
+              ],
+              "list": {
+                "collapsible": true
+              }
+            }
+          ],
+          "operations": {
+            "create": false,
+            "rename": false,
+            "delete": false
+          }
+        },
+        {
+          "name": "notes",
+          "label": "AMBER notes & wheel image",
+          "type": "file",
+          "path": "content/library.json",
+          "format": "json",
+          "fields": [
+            {
+              "name": "amber",
+              "label": "AMBER items (must stay visible)",
+              "type": "string",
+              "list": {
+                "collapsible": true
+              }
+            },
+            {
+              "name": "wheel",
+              "label": "The Sambodhaya wheel image",
+              "type": "object",
+              "fields": [
+                {
+                  "name": "alt",
+                  "label": "What the image shows (for those who can't see it)",
+                  "type": "object",
+                  "fields": [
+                    {
+                      "name": "th",
+                      "label": "ไทย · Thai",
+                      "type": "text",
+                      "required": true
+                    },
+                    {
+                      "name": "en",
+                      "label": "English",
+                      "type": "text",
+                      "required": true
+                    }
+                  ],
+                  "required": true
+                },
+                {
+                  "name": "related",
+                  "label": "Related source keys",
+                  "type": "string",
+                  "list": {
+                    "collapsible": true
+                  }
+                }
+              ]
+            }
+          ],
+          "operations": {
+            "create": false,
+            "rename": false,
+            "delete": false
+          }
+        }
+      ]
+    }
+  ]
+}
