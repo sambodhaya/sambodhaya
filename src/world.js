@@ -4250,6 +4250,8 @@ function setModel(obj, mixerClips) {
       obj.userData.gait = {}; ["walk", "run"].forEach((k) => { if (player.clips[k]) obj.userData.gait[k] = measureGait(obj, player.clips[k]); });
       obj.userData.lift = {}; ["idle", "walk", "run", "sit"].forEach((k) => { if (player.clips[k]) obj.userData.lift[k] = measureLift(obj, player.clips[k]); });
       obj.userData.seat = player.clips.sit ? measureSeat(obj, player.clips.sit) : 0;
+      ["walk", "run"].forEach((k) => { const g = obj.userData.gait[k]; if (g) g.cycles = Math.max(1, Math.round(g.steps * player.clips[k].duration / 2)); });
+      if (player.clips.run) obj.userData.gait.runPhase = measureRunPhase(obj, player.clips.walk, player.clips.run, obj.userData.gait.walk.cycles, obj.userData.gait.run.cycles);
     }
     player.gait = obj.userData.gait; player.lift = obj.userData.lift; player.seat = obj.userData.seat || 0;
     player.mixer = new THREE.AnimationMixer(obj);
@@ -4303,12 +4305,59 @@ function measureGait(obj, clip) {
   const s = new THREE.Vector3(); obj.getWorldScale(s);
   return { speed: Math.max(0.5, (2 * range * cycles) / clip.duration * (s.z || 1)), steps: (2 * cycles) / clip.duration };
 }
+// Where in one run stride the feet match the start of a walk stride: which foot is ahead (left minus right, along
+// his facing) sampled through one stride of each, and the shift where the two curves agree best.
+function measureRunPhase(obj, walk, run, walkCycles, runCycles) {
+  let L = null, R = null; obj.traverse((o) => { if (o.isBone && /^(.*[:|])?LeftFoot$/.test(o.name)) L = o; if (o.isBone && /^(.*[:|])?RightFoot$/.test(o.name)) R = o; });
+  if (!L || !R) return 0;
+  const N = 48, a = new THREE.Vector3(), b = new THREE.Vector3();
+  const curve = (clip, cycles) => {
+    const mixer = new THREE.AnimationMixer(obj); mixer.clipAction(clip).play(); const out = [];
+    for (let k = 0; k < N; k++) { mixer.setTime(clip.duration / cycles * k / N); obj.updateMatrixWorld(true); out.push(obj.worldToLocal(L.getWorldPosition(a)).z - obj.worldToLocal(R.getWorldPosition(b)).z); }
+    mixer.stopAllAction(); mixer.uncacheRoot(obj); return out;
+  };
+  const cw = curve(walk, walkCycles), cr = curve(run, runCycles);
+  let best = 0, score = -Infinity;
+  for (let o = 0; o < N; o++) { let c = 0; for (let k = 0; k < N; k++) c += cw[k] * cr[(k + o) % N]; if (c > score) { score = c; best = o; } }
+  return best / N;
+}
 function playClip(name, fade = 0.25) {
   if (!player.mixer || !player.clips[name] || player.current === name) return;
   const a = player.mixer.clipAction(player.clips[name]), prev = player.action;
-  a.reset().setEffectiveWeight(1).play();
-  if (prev && prev !== a) prev.crossFadeTo(a, fade, false); else a.fadeIn(fade);
+  if (player.current === "loco") { // leaving the walk/run blend: both fade out, still stepping
+    const r = player.mixer.clipAction(player.clips.run);
+    for (const x of [prev, r]) { x.timeScale = player.loco.rate; x.fadeOut(fade); }
+    a.reset().setEffectiveWeight(1).fadeIn(fade).play();
+  } else {
+    a.reset().setEffectiveWeight(1).play();
+    if (prev && prev !== a) prev.crossFadeTo(a, fade, false); else a.fadeIn(fade);
+  }
   player.action = a; player.current = name;
+}
+// Walking and running as one gait: the mix follows his (smoothed) pace, and both clips stay on the same step (one
+// shared stride phase, the run shifted by its measured offset), so speeding up or slowing down never swaps feet.
+// The walk clip holds several strides, the run one: the phase runs through all of the walk's strides.
+const WALK_PACE = 2.6, RUN_PACE = 6;
+function locomote(fade = 0.25) {
+  if (player.current === "loco") return;
+  const w = player.mixer.clipAction(player.clips.walk), r = player.mixer.clipAction(player.clips.run), prev = player.action;
+  if (prev && prev !== w && prev !== r) prev.fadeOut(fade);
+  player.loco = { phase: 0, in: 0, fade, rate: 1, cyc: 0 };
+  for (const a of [w, r]) { a.reset(); a.timeScale = 0; a.setEffectiveWeight(0); a.play(); }
+  player.action = w; player.current = "loco";
+}
+function stepLoco(dt, speed, mix) {
+  const L = player.loco, g = player.gait, w = player.mixer.clipAction(player.clips.walk), r = player.mixer.clipAction(player.clips.run);
+  L.in = L.fade > 0 ? Math.min(1, L.in + dt / L.fade) : 1;
+  w.setEffectiveWeight(L.in * (1 - mix)); r.setEffectiveWeight(L.in * mix);
+  const Dw = player.clips.walk.duration, Dr = player.clips.run.duration;
+  const strideW = g.walk.speed * Dw / g.walk.cycles, strideR = g.run.speed * Dr / g.run.cycles; // metres per stride
+  const minCyc = 0.4 * g.walk.cycles / Dw; // (never slower than the walk at 0.4x, as before)
+  L.cyc = Math.max(minCyc, speed / (strideW + (strideR - strideW) * mix)); // strides per second: the feet keep pace with the ground
+  L.rate = L.cyc * Dw / g.walk.cycles;
+  L.phase = (L.phase + dt * L.cyc) % g.walk.cycles;
+  w.time = L.phase / g.walk.cycles * Dw;
+  r.time = (((L.phase % 1) + g.runPhase) % 1) * Dr / g.run.cycles;
 }
 function fitModel(obj, height = 2.9) {
   const box = new THREE.Box3().setFromObject(obj); const size = box.getSize(new THREE.Vector3());
@@ -5878,7 +5927,8 @@ function wearKit(kit) {
   const k = boyKits[kit]; if (!k || player.model === k.holder) return;
   const was = player.current;
   setModel(k.holder, k.clips);
-  if (was && was !== "idle") { player.current = null; playClip(was, 0); }
+  if (was === "loco" && player.clips.run) locomote(0);
+  else if (was && was !== "idle") { player.current = null; playClip(was, 0); }
 }
 function hallStepOf(x, z) { // the front step of the hall whose floor this is: where the shoes are left
   const f = floors.find((q) => q.hall && inFloor(q, x, z) != null); if (!f) return null;
@@ -5959,6 +6009,10 @@ addEventListener("keydown", (e) => {
   if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Slash"].includes(e.code)) e.preventDefault();
 });
 addEventListener("keyup", (e) => { keys[e.code] = false; });
+// a key let go while the window is in the background never sends its keyup: forget held keys on leaving
+const releaseKeys = () => { for (const k in keys) keys[k] = false; };
+addEventListener("blur", releaseKeys);
+addEventListener("visibilitychange", () => { if (document.hidden) releaseKeys(); });
 let drag = null;
 canvas.addEventListener("pointerdown", (e) => {
   canvas.focus();
@@ -6936,7 +6990,7 @@ $("btn-avatar").addEventListener("click", () => openAvatar());
 
 /* ---------------- main loop ---------------- */
 const clock = new THREE.Clock();
-const tmp = new THREE.Vector3(), head = new THREE.Vector3();
+const tmp = new THREE.Vector3(), head = new THREE.Vector3(), camLook = new THREE.Vector3(0, -1e4, 0); // (far off: the first frame snaps)
 const camRay = new THREE.Raycaster(), camFwd = new THREE.Vector3();
 let waterClock = 0;
 let walkPhase = 0;
@@ -7211,13 +7265,15 @@ function frame(dt) {
   camRay.set(head, want); camRay.far = dist;
   const hit = camRay.intersectObjects(camBlock, false)[0];
   if (hit) tmp.copy(head).addScaledVector(want, Math.max(1.2, hit.distance - 0.35));
-  if (settings.calmMotion || hit) camera.position.copy(tmp); else camera.position.lerp(tmp, Math.min(1, dt * 8));
+  if (settings.calmMotion || hit || camera.position.distanceTo(tmp) > 8) camera.position.copy(tmp); else camera.position.lerp(tmp, 1 - Math.exp(-8 * dt)); // (a jump across the temple snaps)
   // after walking to a leaf on the great Bodhi tree, the camera turns up toward it, and back down once he walks on
   if (leafLook.on && Math.hypot(player.x - leafLook.x, player.z - leafLook.z) > 1.2) leafLook.on = false;
   const sel = leafLook.on && leafTree.byId.get(leafTree.sel);
   leafLook.k += ((sel ? 0.6 : 0) - leafLook.k) * Math.min(1, dt * (settings.calmMotion ? 6 : 2.5));
   if (leafLook.k > 0.005 && (sel || leafTree.byId.get(leafTree.sel))) head.lerp((sel || leafTree.byId.get(leafTree.sel)).pos, leafLook.k);
-  camera.lookAt(head);
+  // the aim follows the head smoothly too (a step up, sitting down, the leaf look), at any frame rate; a big jump snaps
+  if (settings.calmMotion || camLook.distanceTo(head) > 3) camLook.copy(head); else camLook.lerp(head, 1 - Math.exp(-12 * dt));
+  camera.lookAt(camLook);
 
   // running water (slower with calm motion on)
   { const wdt = dt * (settings.calmMotion ? 0.35 : 1); waterClock += wdt; waterTime.value = waterClock; waterAnims.forEach((f) => f(wdt, waterClock)); }
@@ -7297,7 +7353,11 @@ function kidStep(dt) {
   const mag = Math.min(1, Math.hypot(fx, fz));
   // a calm walk, like the boy in the film; Shift (or the touch stick pushed to its edge) runs
   const running = inp.run;
-  const speed = (running ? (player.clips.walk && !player.clips.run && player.gait.walk ? Math.min(6, player.gait.walk.speed * 2.2) : 6) : 2.6) * mag * (1 - 0.35 * stoop.w); // (slower, walking low before the monks) a 10-year-old's natural walking and running pace at this scale (the girl: a brisk walk her stride keeps up with)
+  const pace = running ? (player.clips.walk && !player.clips.run && player.gait.walk ? Math.min(RUN_PACE, player.gait.walk.speed * 2.2) : RUN_PACE) : WALK_PACE; // a 10-year-old's natural walking and running pace at this scale (the girl: a brisk walk her stride keeps up with)
+  // the pace eases between walking and running (Shift) rather than jumping, and the walk/run mix follows it
+  player.pace = player.pace == null ? pace : player.pace + (pace - player.pace) * (1 - Math.exp(-6 * dt));
+  const speed = player.pace * mag * (1 - 0.35 * stoop.w); // (slower, walking low before the monks)
+  const runMix = Math.min(1, Math.max(0, (player.pace - WALK_PACE) / (RUN_PACE - WALK_PACE)));
   if (mag > 0.05) {
     track("w_move");
     const s = Math.sin(camYaw), c = Math.cos(camYaw);
@@ -7315,14 +7375,18 @@ function kidStep(dt) {
   }
   const gy = groundAt(player.x, player.z);
   player.vy -= 25 * dt; player.y = Math.max(gy, player.y + player.vy * dt); if (player.y === gy) player.vy = Math.max(0, player.vy);
-  player.obj.position.set(player.x, player.y, player.z); player.obj.rotation.y = player.yaw;
+  // stepping up onto a step or a raised floor eases the body up over a few frames instead of a one-frame pop
+  // (falling, jumping and big moves follow player.y directly)
+  if (player.visY == null || player.y !== gy || player.visY > player.y || player.y - player.visY > 0.6) player.visY = player.y;
+  else player.visY += (player.y - player.visY) * (1 - Math.exp(-20 * dt));
+  player.obj.position.set(player.x, player.visY, player.z); player.obj.rotation.y = player.yaw;
 
   // limb swing for blocky avatars, clips for 3D models
   const moving = mag > 0.05;
   if (broom === SHARED.broom) broomStep(dt, moving); // (the broom moves with whoever holds it)
   const stepsBefore = Math.floor(walkPhase / Math.PI);
   const gait = player.gait && player.gait[player.current];
-  walkPhase += dt * (moving ? (gait && player.action ? Math.PI * gait.steps * player.action.timeScale : speed * 1.6) : 0); // footsteps follow the animation's own steps
+  walkPhase += dt * (moving ? (player.current === "loco" ? Math.PI * 2 * player.loco.cyc : gait && player.action ? Math.PI * gait.steps * player.action.timeScale : speed * 1.6) : 0); // footsteps follow the animation's own steps
   if (moving && Math.floor(walkPhase / Math.PI) !== stepsBefore && player.y <= gy + 0.05) sound.step(insideHall(player.x, player.z) ? "marble" : onPath(player.x, player.z) ? "stone" : "grass");
   const limbs = player.model && player.model.userData.limbs;
   if (limbs) {
@@ -7337,7 +7401,8 @@ function kidStep(dt) {
     if (kraap.t >= 0 || alms.t >= 0 || shoes.t >= 0 || feed.t >= 0 || merit.t >= 0 || can.t >= 0) playClip("idle", 0.4);
     else if (sit.on && player.clips.sit) playClip(phabphiap() ? "idle" : "sit", 1.2);
     else if (sit.rise > 0) playClip("idle", 1.0);
-    else playClip(!moving ? "idle" : player.clips.run && speed > 5 ? "run" : player.clips.walk ? "walk" : "idle");
+    else if (moving && player.clips.walk && player.clips.run) locomote();
+    else playClip(!moving ? "idle" : player.clips.walk ? "walk" : "idle");
     // keep the soles (or, seated, the crossed legs) on the ground: each animation has its own lift,
     // blended by how much of each animation is showing; on a cushion, its height is added
     if (player.lift) {
@@ -7347,7 +7412,8 @@ function kidStep(dt) {
       player.model.position.y += (lift - player.model.position.y) * Math.min(1, dt * 10);
     }
     const g = player.gait[player.current];
-    if (g && player.action) player.action.timeScale = Math.min(2.6, Math.max(0.4, speed / g.speed)); // feet keep pace with the ground
+    if (player.current === "loco") stepLoco(dt, speed, runMix);
+    else if (g && player.action) player.action.timeScale = Math.min(2.6, Math.max(0.4, speed / g.speed)); // feet keep pace with the ground
     player.mixer.update(dt);
   }
   else if (player.model && !player.vrm && !settings.calmMotion) player.model.position.y = moving ? Math.abs(Math.sin(walkPhase)) * 0.12 : 0;
@@ -7422,7 +7488,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
 });
 camYaw = 0; camera.position.set(0, 8, 105);
 restoreSpot(); // back from a page of the site: stand where you were
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, renderer, reflectors, two: () => ({ P1, P2, twoP, owner, kid }), meal, setMealTime: (v) => { mealForce = v; }, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startGreet, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, can, waterPots, startWater, fold, startFold, foldPetal, altars, gildImage, night, leafTree, showLeaf, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, renderer, camera, keys, reflectors, two: () => ({ P1, P2, twoP, owner, kid }), meal, setMealTime: (v) => { mealForce = v; }, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startGreet, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, can, waterPots, startWater, fold, startFold, foldPetal, altars, gildImage, night, leafTree, showLeaf, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 // (on a phone the temple shows sooner: models still on their way pop in when they arrive)
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, phone ? 4000 : 7000))]).then(() => {
   $("loading").hidden = true;
