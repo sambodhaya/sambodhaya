@@ -2,7 +2,7 @@
   "code": "U01",
   "title": {
     "th": "ออกแสวงหา",
-    "en": "Going forth to seek"
+    "en": "Going forward to seek"
   },
   "question": {
     "th": "ถ้าเรายังไม่รู้คำตอบ เราตรวจสอบอย่างไรโดยไม่รีบเชื่อ?",
@@ -48,5 +48,6 @@
       ],
       "a": 1
     }
-  ]
+  ],
+  "media": false
 }
