@@ -4470,6 +4470,24 @@ const dog = { obj: new THREE.Group(), x: 3, z: 90, y: 0, yaw: Math.PI };
   dog.obj.visible = settings.guide !== false;
   scene.add(dog.obj);
   // the temple dog from the entrance artwork, as a 3D model (the block dog stays if it can't load)
+  // The temple dog with a skeleton and real dog clips (dog-rig.glb: the classic model, rigged with the skeleton and
+  // clips of Jack, the author's terrier; built by .dev/dogrig). If it can't load, the unrigged model walks by shader.
+  propLoader.load("assets/models/dog-rig.glb", (g) => {
+    const obj = g.scene;
+    dog.obj.children.forEach((c) => { c.visible = false; });
+    obj.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
+    dog.lids = addLids(obj, "dog-rig");
+    const m = fitTo(obj, 1.7); // (faces +z already)
+    dog.obj.add(m); dog.model = m;
+    const mixer = new THREE.AnimationMixer(obj), A = {};
+    g.animations.forEach((c) => { const a = mixer.clipAction(c); if (/_(down|up)$|^shake$|^head_tilt$/.test(c.name)) { a.setLoop(THREE.LoopOnce); a.clampWhenFinished = true; } A[c.name] = a; });
+    const B = {}; obj.traverse((o) => { if (o.isBone) B[o.name] = o; });
+    dog.rig = { mixer, A, B, state: null, cur: null, busy: 0, mesh: obj.getObjectByProperty("isSkinnedMesh", true) };
+    dog.obj.updateMatrixWorld(true); dogCrown();
+    dogPlay("idle", 0);
+  }, undefined, () => loadClassicDog());
+}
+function loadClassicDog() {
   loadProp("dog").then((src) => {
     if (!src) return;
     dog.obj.children.forEach((c) => { c.visible = false; });
@@ -4484,6 +4502,33 @@ const dog = { obj: new THREE.Group(), x: 3, z: 90, y: 0, yaw: Math.PI };
     const m = fitTo(src, 1.7); m.rotation.y = -Math.PI / 2; // the model faces sideways; turn it to walk head-first
     dog.obj.add(m); dog.model = m;
   });
+}
+// the rigged dog: cross-fade to a clip (a one-off clip, such as sitting down, holds the dog until it ends)
+function dogPlay(name, fade = 0.25) {
+  const R = dog.rig, a = R && R.A[name]; if (!a || R.cur === a) return;
+  a.reset().setEffectiveWeight(1).play();
+  if (R.cur) R.cur.crossFadeTo(a, fade, false); else a.fadeIn(fade);
+  R.cur = a; R.busy = a.loop === THREE.LoopOnce ? a.getClip().duration - 0.05 : 0;
+}
+// what the dog does follows the same numbers as before (dogAnim.sit / lie, its speed); the rig only shows it: walk or
+// trot in step with its speed, sit down and stand up, lie down and get up, stand about
+const DOG_WALK = 2.19, DOG_TROT = 4.89; // world units a second at which the walk and the trot clips keep the paws planted
+function dogRigStep(dt, speed) {
+  const R = dog.rig; if (!R) return;
+  R.busy = Math.max(0, R.busy - dt);
+  const want = dogAnim.lie.value > 0.5 ? "lie" : dogAnim.sit.value > 0.5 ? "sit" : speed > 0.5 ? (speed > 3.6 ? "trot" : "walk") : "idle";
+  if (!R.busy && want !== R.state) {
+    const from = R.state; R.state = want;
+    if (from === "sit" && want !== "lie") { dogPlay("sit_up", 0.15); R.state = "standing"; }
+    else if (from === "lie") { dogPlay("lie_up", 0.15); R.state = "standing"; }
+    else if (want === "sit") { dogPlay("sit_down", 0.2); R.next = "sit"; }
+    else if (want === "lie") { dogPlay(from === "sit" ? "lie_down" : "lie_down", 0.2); R.next = "lie"; }
+    else dogPlay(want, 0.25);
+  }
+  if (!R.busy && R.next && R.cur && R.cur.loop === THREE.LoopOnce) { dogPlay(R.next, 0.2); R.next = null; }
+  if (R.cur === R.A.walk) R.cur.timeScale = THREE.MathUtils.clamp(speed / DOG_WALK, 0.6, 1.8);
+  else if (R.cur === R.A.trot) R.cur.timeScale = THREE.MathUtils.clamp(speed / DOG_TROT, 0.7, 2.6);
+  R.mixer.update(dt * (settings.calmMotion ? 0.85 : 1));
 }
 
 // A trotting walk for the dog model. In the model's own space the head points to +x, it stands
@@ -4563,7 +4608,7 @@ function petStep(dt) {
   const moved = Math.hypot(player.x - (pet.from ? pet.from.x : player.x), player.z - (pet.from ? pet.from.z : player.z)) > 0.3;
   if (pet.phase === "call") {
     if (moved || pet.t > 8) { pet.phase = null; return; } // walked off, or it couldn't come
-    if (pet.who === "dog" && Math.hypot(dog.x - pet.spot.x, dog.z - pet.spot.z) < 0.5 && dogAnim.sit.value > 0.8 && Math.abs(Math.atan2(Math.sin(dog.yaw - pet.yaw), Math.cos(dog.yaw - pet.yaw))) < 0.15) {
+    if (pet.who === "dog" && Math.hypot(dog.x - pet.spot.x, dog.z - pet.spot.z) < 0.5 && dogAnim.sit.value > 0.8 && (!dog.rig || (dog.rig.cur === dog.rig.A.sit && dog.rig.cur.time > 0.2)) /* (the rigged dog: once it has sat down) */ && Math.abs(Math.atan2(Math.sin(dog.yaw - pet.yaw), Math.cos(dog.yaw - pet.yaw))) < 0.15) {
       // face to face: he stands before the dog, its head within reach of his right hand, and leans over a little to
       // stroke it (sitting, the dog is as tall as a kneeling child)
       const { at, fy, R } = petSpot(petStroke(0));
@@ -4583,6 +4628,7 @@ let dogHead = null, dogBody = null;
 // where he stands to stroke the sitting dog: straight in front of it, facing it, as near as its front paws and chest
 // allow (its shape worked out from the model, tipped back into its sitting pose as the dog's shader does)
 function petSpot(hd) {
+  if (dog.rig) return petSpotRig(hd);
   const mesh = dog.model && dog.model.getObjectByProperty("isMesh", true);
   if (!dogBody && mesh) { // a sample of the model's points
     const pos = mesh.geometry.attributes.position; dogBody = [];
@@ -4603,8 +4649,30 @@ function petSpot(hd) {
   const R = Math.max(PET_REACH, paws + PET_TOES, chest + PET_BODY);
   return { at: { x: hd.x - fx * R + fz * PET_RIGHT, z: hd.z - fz * R - fx * PET_RIGHT }, fy, R };
 }
+// the rigged dog: the same, measured from its bones as its clip has posed them (front paws, chest), with their padding
+function petSpotRig(hd) {
+  const B = dog.rig.B, fy = pet.yaw + Math.PI, fx = Math.sin(fy), fz = Math.cos(fy), w = new THREE.Vector3();
+  const out = (bone, pad) => { if (!bone) return 0; bone.getWorldPosition(w); return -((w.x - hd.x) * fx + (w.z - hd.z) * fz) + pad; };
+  const paws = Math.max(out(B.LeftFrontPaw, 0.12), out(B.RightFrontPaw, 0.12)), chest = Math.max(out(B.Chest, 0.3), out(B.Neck1, 0.22));
+  const Rr = Math.max(PET_REACH + 0.15, paws + PET_TOES + 0.55, chest + PET_BODY + 0.35); // (his shoes and knees need more room than the classic dog's sums allowed)
+  return { at: { x: hd.x - fx * Rr + fz * PET_RIGHT, z: hd.z - fz * Rr - fx * PET_RIGHT }, fy, R: Rr };
+}
+// the crown of the rigged dog's head, in the head bone's own space (worked out once, in the pose it loads in)
+function dogCrown() {
+  const R = dog.rig; if (R.crown) return R.crown;
+  // the top of the head: from the Head bone up to the ear tips' height, a little behind the bone (worked out in the
+  // pose it loads in, in the head bone's own space)
+  const head = R.B.Head, hw = head.getWorldPosition(new THREE.Vector3()), top = new THREE.Box3().setFromObject(dog.model).max.y;
+  const back = new THREE.Vector3(Math.sin(dog.yaw), 0, Math.cos(dog.yaw)).multiplyScalar(-0.05);
+  R.crown = head.worldToLocal(hw.clone().add(back).setY(hw.y + (top - hw.y) * 0.55));
+  return R.crown;
+}
 function petStroke(t) {
   if (pet.who === "cat") return catStroke(t);
+  if (dog.rig) {
+    const head = dog.rig.B.Head, back = new THREE.Vector3(Math.sin(dog.yaw), 0, Math.cos(dog.yaw)).multiplyScalar(-(0.03 + 0.06 * Math.sin(t * 4)));
+    return head.localToWorld(dogCrown().clone()).add(back).add(new THREE.Vector3(0, -0.03 + 0.05 * dogAnim.nuzzle.value * (0.5 + 0.5 * Math.sin(dogAnim.time.value * 5)), 0));
+  }
   const mesh = dog.model && dog.model.getObjectByProperty("isMesh", true); if (!mesh) return new THREE.Vector3(dog.x, 1.2, dog.z);
   if (!dogHead) { // the top of the head, in the model's own space (head toward +x, paws at y = -0.634)
     const pos = mesh.geometry.attributes.position; let top = -Infinity;
@@ -5413,6 +5481,9 @@ const EYES = {
   "monk-senior": { lid: "#d89152", eyes: [
     [0.1099, 0.7357, 0.0791, 0.0359, 0.0294, 0.0398],
     [0.1095, 0.738, -0.0782, 0.0359, 0.0294, 0.0398]] },
+  "dog-rig": { lid: "#c69c71", eyes: [
+    [-0.176, 0.4632, 0.8074, 0.0294, 0.0405, 0.0265],
+    [-0.0587, 0.4739, 0.8764, 0.0527, 0.0414, 0.0474]] },
   "dog": { lid: "#c69c71", eyes: [
     [0.8074, 0.4632, 0.176, 0.0265, 0.0405, 0.0294],
     [0.8764, 0.4739, 0.0587, 0.0474, 0.0414, 0.0527]] },
@@ -7332,7 +7403,12 @@ function frame(dt) {
   { const t = performance.now() / 1000; for (let i = glowAnims.length - 1; i >= 0; i--) if (glowAnims[i](dt, t)) glowAnims.splice(i, 1); } // the donation box's glow, lotus and path
   // candle flames sway a little (not in calm motion)
   if (!settings.calmMotion) { const t = performance.now() / 1000; flames.forEach((f, i) => { f.scale.y = 1.8 + Math.sin(t * 7 + i * 1.7) * 0.18; }); }
-  if (dog.model) dog.model.position.y = Math.abs(Math.sin(dogAnim.phase.value)) * 0.035 * dogAnim.walk.value; // a light bounce in step
+  if (dog.rig) { // its speed as it actually moved this frame (some scripted moves place it directly), a little smoothed
+    const R = dog.rig, mv = R.lx == null || dt <= 0 ? 0 : Math.hypot(dog.x - R.lx, dog.z - R.lz) / dt; R.lx = dog.x; R.lz = dog.z;
+    R.v = mv > 40 ? 0 : (R.v || 0) + (mv - (R.v || 0)) * Math.min(1, dt * 10); // (a jump of many metres is a teleport, not a run)
+    dogRigStep(dt, R.v);
+  }
+  else if (dog.model) dog.model.position.y = Math.abs(Math.sin(dogAnim.phase.value)) * 0.035 * dogAnim.walk.value; // a light bounce in step
 
   camera.getWorldDirection(camFwd);
   sound.update(camera.position, camFwd, insideHall(player.x, player.z) && Math.hypot(camera.position.x - player.x, camera.position.z - player.z) < 14, dt);
