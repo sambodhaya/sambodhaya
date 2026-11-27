@@ -1167,6 +1167,21 @@ const SEATED_JOINTS = {
   },
 };
 const SPINE_CHAIN = ["Hips", "Spine02", "Spine01", "Spine", "neck", "Head", "HeadTop"], ARM_CHAIN = ["Shoulder", "Arm", "ForeArm", "ForeArmTwist", "Hand", "HandTip"];
+const FINGERS = ["Thumb", "Index", "Middle", "Ring", "Pinky"];
+// curl a seated monk's fingers: each joint bends toward the palm by the given angles (base, middle, last joint; the
+// thumb the same, a little less), blended by w; from the pose as made each frame. The four fingers bend together
+// (the hands, remade with separate fingers, take the same bend on each finger).
+function curlSeated(B, sd, a, w) {
+  const hand = B[sd + "Hand"]; if (!B.fingers || !hand) return;
+  const palm = hand.userData.palm.clone().applyQuaternion(hand.getWorldQuaternion(new THREE.Quaternion())), p0 = new THREE.Vector3(), p1 = new THREE.Vector3(), ax = new THREE.Vector3();
+  for (const f of FINGERS) for (let j = 1; j <= 3; j++) {
+    const b = B[sd + "Hand" + f + j], c = B[sd + "Hand" + f + (j + 1)]; if (!b || !c) continue;
+    b.quaternion.copy(b.userData.rest); b.updateMatrixWorld(true);
+    if (w <= 0.001) continue;
+    b.getWorldPosition(p0); c.getWorldPosition(p1); ax.crossVectors(p1.sub(p0).normalize(), palm).normalize();
+    turnBone(b, _q2.setFromAxisAngle(ax, a[j - 1] * w * (f === "Thumb" ? 0.6 : 1)));
+  }
+}
 function rigSeated(model, J) {
   let mesh = null; model.traverse((o) => { if (!mesh && o.isMesh) mesh = o; }); if (!mesh) return null;
   model.updateMatrixWorld(true);
@@ -1180,6 +1195,8 @@ function rigSeated(model, J) {
       parent[sd + n] = i ? sd + ARM_CHAIN[i - 1] : "Spine"; if (i) child[sd + ARM_CHAIN[i - 1]] = sd + n;
     });
     P[sd + "ForeArmTwist"] = P[sd + "ForeArm"].clone().lerp(P[sd + "Hand"], 0.5); // halfway down the forearm: it takes half the wrist's turn
+    // the fingers (where measured): three bones each and a tip, from the hand
+    if (J.fingers) FINGERS.forEach((f) => { const pts = J.fingers[sd][f].p; for (let j = 0; j < 4; j++) { const n = sd + "Hand" + f + (j + 1); P[n] = new THREE.Vector3(...pts[j]); parent[n] = j ? sd + "Hand" + f + j : sd + "Hand"; if (j) child[sd + "Hand" + f + j] = n; } });
   });
   // the bones: each turned so its +y runs to its child (a leaf keeps its parent's turn); placed in the model's space
   const B = {}, Q = {}, fwd = new THREE.Vector3(1, 0, 0);
@@ -1203,6 +1220,7 @@ function rigSeated(model, J) {
   // from the forearm, inside a tube around the arm), so a knee just under a hand stays with the body; the rest of
   // the body follows the spine by height
   const pos = mesh.geometry.attributes.position, N = pos.count, si = new Uint16Array(N * 4), sw = new Float32Array(N * 4), cp = new THREE.Vector3();
+  const fingerOf = new Map(); if (J.fingers) ["Left", "Right"].forEach((sd) => FINGERS.forEach((f) => J.fingers[sd][f].v.forEach((vi) => fingerOf.set(vi, [sd, f]))));
   const segs = ["Left", "Right"].map((sd) => [["Arm", "ForeArm", 0], ["ForeArm", "ForeArmTwist", 1], ["ForeArmTwist", "Hand", 1], ["Hand", "HandTip", 2]]
     .map(([a, c, r]) => ({ bone: idx(sd + a), line: new THREE.Line3(P[sd + a], P[sd + c]), r: J.radius[sd][r] })));
   const ys = SPINE_CHAIN.slice(0, -1).map((n) => P[n].y);
@@ -1225,7 +1243,13 @@ function rigSeated(model, J) {
     const v = V[i], w = [], ds = D[i], S = segs[v.z < 0 ? 0 : 1];
     // the arm, where this vertex belongs to it
     const m = reached[id[i]] ? (1 - smooth(1.2, TUBE, q[i])) * smooth(J.Arm[2] - 0.05, J.Arm[2] + 0.03, Math.abs(v.z)) : 0; // (fading into the body at the shoulder)
-    if (m > 0) {
+    const fv = fingerOf.get(i);
+    if (m > 0 && fv) { // a finger's vertex: along its three bones, blended at each knuckle (and into the hand at the base)
+      const [sd, f] = fv, pts = J.fingers[sd][f].p.map((a) => new THREE.Vector3(...a)); let best = 1e9, u = 0;
+      for (let k = 0; k < 3; k++) { const ln = new THREE.Line3(pts[k], pts[k + 1]), t = ln.closestPointToPointParameter(v, true), d = ln.at(t, cp).distanceTo(v); if (d < best) { best = d; u = k + t; } }
+      const a = smooth(-0.15, 0.2, u), b = smooth(0.85, 1.15, u), c = smooth(1.85, 2.15, u), nm = (j) => idx(sd + "Hand" + f + j);
+      [[idx(sd + "Hand"), 1 - a], [nm(1), a - b], [nm(2), b - c], [nm(3), c]].forEach(([bn, x]) => { if (x > 0.001) w.push([bn, m * x]); });
+    } else if (m > 0) {
       const iw = ds.map((d) => Math.pow(1 / Math.max(d, 1e-3), 6)), top = iw.map((x, k) => [x, k]).sort((a, b) => b[0] - a[0]).slice(0, 2), tot = top[0][0] + top[1][0];
       top.forEach(([x, k]) => w.push([S[k].bone, m * x / tot]));
     }
@@ -1236,7 +1260,8 @@ function rigSeated(model, J) {
     else if (j === ys.length - 1) w.push([idx(SPINE_CHAIN[j]), rest]);
     else if (t < 0.5) { w.push([idx(SPINE_CHAIN[j]), rest * (0.5 + t)]); if (j > 0) w.push([idx(SPINE_CHAIN[j - 1]), rest * (0.5 - t)]); else w[w.length - 1][1] = rest; }
     else { w.push([idx(SPINE_CHAIN[j]), rest * (1.5 - t)], [idx(SPINE_CHAIN[j + 1]), rest * (t - 0.5)]); }
-    w.slice(0, 4).forEach(([b, x], k) => { si[i * 4 + k] = b; sw[i * 4 + k] = x; });
+    w.sort((p1, p2) => p2[1] - p1[1]); const w4 = w.slice(0, 4), wt = w4.reduce((acc, e) => acc + e[1], 0) || 1;
+    w4.forEach(([b, x], k) => { si[i * 4 + k] = b; sw[i * 4 + k] = x / wt; });
   }
   const geo = mesh.geometry.clone();
   geo.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(si, 4)); geo.setAttribute("skinWeight", new THREE.Float32BufferAttribute(sw, 4));
@@ -1248,14 +1273,23 @@ function rigSeated(model, J) {
   // the palms face down in the model as made (the rest pose that handShape reads them from is not hanging arms)
   const shape = handShape(model);
   if (shape) ["Left", "Right"].forEach((sd) => { const hs = shape[sd]; if (hs.palm.clone().applyQuaternion(Q[sd + "Hand"]).y > 0) hs.palm.negate(); });
+  if (J.fingers) { // each finger bone's pose as made, and the palm's normal in the hand bone's own space, for curling
+    B.fingers = true;
+    ["Left", "Right"].forEach((sd) => { B[sd + "Hand"].userData.palm = new THREE.Vector3(...J.fingers[sd].palm).normalize().applyQuaternion(Q[sd + "Hand"].clone().invert()); });
+    Object.values(B).forEach((b) => { if (/Hand(Thumb|Index|Middle|Ring|Pinky)\d/.test(b.name)) b.userData.rest = b.quaternion.clone(); });
+  }
   return B;
 }
 // The teachers in the main hall, rigged so they can move (the senior monk receives the Kathina robe and blesses).
 // If a rigged model can't load, the unrigged figure sits in its place.
 const TEACHER_RIGS = { "monk-elder": "monk-senior", "monk": "monk-middle", "monk-young": "monk-junior" };
+// the seated monks' fingers, measured on each model (.dev/monk-fingers): per hand, each digit's four points (base
+// knuckle, middle knuckle, last knuckle, tip; the thumb from its root) and the vertices that belong to it
+let seatedFingers = null;
+const seatedFingersReady = fetch("assets/models/monk-fingers.json").then((r) => (r.ok ? r.json() : null)).then((d) => (seatedFingers = d)).catch(() => null);
 function loadSeated(file, s, fallback) {
-  loadProp(file).then((src) => {
-    const J = SEATED_JOINTS[file];
+  Promise.all([loadProp(file), seatedFingersReady]).then(([src]) => {
+    const J0 = SEATED_JOINTS[file], J = J0 && { ...J0, fingers: seatedFingers && seatedFingers[file] };
     if (!src || !J) { seatStatic(fallback, s.lean); return; }
     const obj = src.clone(); obj.position.set(0, 0, 0); obj.rotation.set(0, 0, 0); obj.scale.setScalar(1);
     const holder = fitTo(obj, MONK_H); holder.rotation.y = MONK_TURN; // fitted while still a plain mesh (a skinned one's bounds need drawn bones)
@@ -5255,6 +5289,13 @@ function teacherStep(h, s, dt) {
   waiMark(RB);
   R.obj.updateMatrixWorld(true);
   teacherEatAfter(s, R, shape);
+  // the fingers: straight at rest in the lap (as sculpted); the right hand closes round the whisk while he holds it;
+  // both curve a little to receive
+  if (RB.fingers) {
+    const hold = Bl && Bl.handHeld ? 1 : 0;
+    curlSeated(RB, "Left", [0.35, 0.4, 0.25], recv);
+    curlSeated(RB, "Right", hold ? [1.0, 1.1, 0.7] : [0.35, 0.4, 0.25], hold || recv);
+  }
   if (Bl && Bl.handHeld) { // the whisk sits in his hand: its grip where his fingers close
     const hand = RB.RightHand.getWorldPosition(new THREE.Vector3()), hs = shape.Right;
     const fq = RB.RightHand.getWorldQuaternion(new THREE.Quaternion()), fdir = hs.finger.clone().applyQuaternion(fq).normalize(), pdir = hs.palm.clone().applyQuaternion(fq).normalize();
@@ -7771,7 +7812,7 @@ document.fonts.load("64px Itim").then(() => document.fonts.load("36px Mali")).ca
 });
 camYaw = 0; camera.position.set(0, 8, 105);
 restoreSpot(); // back from a page of the site: stand where you were
-if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, renderer, camera, keys, reflectors, two: () => ({ P1, P2, twoP, owner, kid }), meal, setMealTime: (v) => { mealForce = v; }, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startGreet, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, can, waterPots, startWater, fold, startFold, foldPetal, altars, gildImage, night, leafTree, showLeaf, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
+if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, renderer, camera, keys, reflectors, two: () => ({ P1, P2, twoP, owner, kid }), meal, setMealTime: (v) => { mealForce = v; }, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startGreet, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, can, waterPots, startWater, fold, startFold, foldPetal, altars, gildImage, night, leafTree, showLeaf, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, curlSeated, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 // (on a phone the temple shows sooner: models still on their way pop in when they arrive)
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, phone ? 4000 : 7000))]).then(() => {
   $("loading").hidden = true;
