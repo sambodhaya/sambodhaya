@@ -61,10 +61,11 @@ body.two .prompt { max-width: calc(50% - 16px); }
 .questbox.folded ol { display: none; }
 .toast { position: fixed; left: 50%; top: calc(62px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); width: min(460px, calc(100% - 24px)); padding: 10px 14px; z-index: 6; line-height: 1.5; font-size: .95rem; pointer-events: none; }
 @media (max-width: 760px) { .questbox { top: auto; bottom: calc(40px + env(safe-area-inset-bottom, 0px)); } .toast { top: calc(var(--prompt-top, 124px) + 46px); } }
-@media (pointer: coarse) { .questbox { left: calc(12px + env(safe-area-inset-left, 0px)); top: auto; bottom: calc(176px + env(safe-area-inset-bottom, 0px)); width: min(236px, calc(100% - 136px)); font-size: .85rem; } } /* above the joystick, clear of the round buttons */
+@media (pointer: coarse) { .questbox { left: calc(12px + env(safe-area-inset-left, 0px)); top: auto; bottom: calc(176px + env(safe-area-inset-bottom, 0px)); width: min(236px, calc(100% - 136px)); padding: 6px 10px; font-size: .8rem; } .questbox > button { font-size: .9rem; } .questbox li:not(.next) { display: none; } } /* above the joystick, clear of the round buttons; on phones only the step to do now (📜 Quests has the rest) */
 
 /* the meditation corner: the choice while sitting, and a warm glow at the edges while it lasts */
-.medi { position: fixed; left: 50%; bottom: calc(40px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 6px 10px 6px 14px; display: flex; gap: 8px; align-items: center; z-index: 5; white-space: nowrap; }
+.medi { position: fixed; left: 50%; bottom: calc(40px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 6px 10px 6px 14px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; align-items: center; z-index: 5; width: max-content; max-width: calc(100% - 24px); box-sizing: border-box; }
+.medi button { white-space: nowrap; }
 .medi span { font-family: var(--display); }
 #medi-glow { position: fixed; inset: 0; pointer-events: none; z-index: 2; opacity: 0; transition: opacity 3s ease; background: radial-gradient(ellipse at center, rgba(255, 196, 120, 0) 55%, rgba(255, 170, 90, .28) 100%); }
 #medi-glow.on { opacity: 1; }
@@ -140,10 +141,11 @@ body.photo .hud-top, body.photo .prompt, body.photo .questbox, body.photo .toast
   .tbtns button { width: 64px; height: 64px; border-radius: 50%; background: rgba(255, 253, 248, .85); border: 2px solid var(--ink); font-family: var(--display); font-size: 1rem; }
   /* phones and tablets: one slim line just under the top buttons, clear of the boy in the middle of the screen
      (the round E button does the key's job; the subtitle is left out) */
-  .prompt { top: var(--prompt-top, 124px); bottom: auto; padding: 5px 6px 5px 12px; gap: 8px; }
+  .prompt { top: var(--prompt-top, 124px); bottom: auto; padding: 5px 6px 5px 12px; gap: 8px; width: max-content; box-sizing: border-box; } /* (max-content: without it a box centred with left 50% may only use half the screen) */
   .prompt .key, .prompt br, #prompt-sub { display: none; }
-  .prompt strong { font-size: 1rem; white-space: nowrap; }
-  .prompt .btn { padding: 3px 12px; font-size: .95rem; white-space: nowrap; }
+  .prompt > span { min-width: 0; }
+  .prompt strong { font-size: 1rem; line-height: 1.25; display: block; } /* a long name wraps, so the button stays on screen (narrow phones, larger text) */
+  .prompt .btn { padding: 3px 12px; font-size: .95rem; white-space: nowrap; flex-shrink: 0; }
   /* two players on a touch screen: a stick in each bottom corner, each with its own small buttons above it */
   body.two .two-touch { display: block !important; }
   body.two .tbtns { display: none; }
