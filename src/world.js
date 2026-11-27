@@ -3604,6 +3604,16 @@ function dustStep(dt) {
     sp.scale.setScalar(u.s0 * (1 + 2.2 * t)); sp.material.opacity = 0.85 * Math.min(1, t * 6) * Math.pow(1 - t, 1.5); // (quickly in, slowly out)
   }
 }
+// closing a hand with finger bones round a handle about 3.5 cm thick (measured on the novice's fingers): each finger's
+// joints bend toward the palm about their local +x, the thumb closes over; w blends from the open hand
+const GRIP = { f: [0.87, 0.96, 0.61], t: [0.35, 0.44, 0.52] }; // radians: base, middle, last joint; thumb root, knuckle, tip
+function gripFingers(B, side, w) {
+  for (const f of ["Index", "Middle", "Ring", "Pinky", "Thumb"]) for (let j = 1; j <= 3; j++) {
+    const b = B[side + "Hand" + f + j]; if (!b) continue;
+    if (!b.userData.rest) b.userData.rest = b.quaternion.clone();
+    b.quaternion.copy(b.userData.rest); b.rotateX((f === "Thumb" ? GRIP.t : GRIP.f)[j - 1] * w);
+  }
+}
 function noviceStep(dt) {
   dustStep(dt);
   const n = novice.n; if (!n) return;
@@ -3627,20 +3637,41 @@ function noviceStep(dt) {
   // the broom swings from side to side before him, brushing leaves along
   const stroke = Math.floor(novice.phase / Math.PI); novice.phase += dt * (novice.speed > 0.1 ? 4.2 : 3);
   const k = n.k / 1.6;
-  const head = new THREE.Vector3(x, 0, z).addScaledVector(fwd, 1.1 * k).addScaledVector(right, 0.1 + Math.sin(novice.phase) * 0.38);
-  const top = new THREE.Vector3(x, 1.85 * k, z).addScaledVector(fwd, 0.25 * k).addScaledVector(right, 0.25 * k);
-  const dir = top.clone().sub(head).normalize();
+  // his hands lead and the broom follows: the right hand low before his hip, the left before his chest, both swinging
+  // with the stroke; the handle runs through both hands down to the ground, where the broom's head sweeps
+  const sw = Math.sin(novice.phase), gy = groundAt(x, z);
+  const gR = new THREE.Vector3(x, gy + 1.17 * k, z).addScaledVector(fwd, 0.5 * k).addScaledVector(right, (0.14 + sw * 0.18) * k);
+  const gL = new THREE.Vector3(x, gy + 1.52 * k, z).addScaledVector(fwd, 0.32 * k).addScaledVector(right, (0.03 + sw * 0.08) * k);
+  const dir = gL.clone().sub(gR).normalize();
+  const head = gR.clone().addScaledVector(dir, -(gR.y - gy) / Math.max(0.2, dir.y)); head.y = gy;
   novice.broom.position.copy(head); novice.broom.quaternion.setFromUnitVectors(up, dir);
   if (!settings.calmMotion && Math.random() < dt * 5) sweepDust(head, right.clone().multiplyScalar(Math.cos(novice.phase)), 1); // a light trickle along the stroke
   if (Math.floor(novice.phase / Math.PI) !== stroke) { sound.sweep(head.x, 0.1, head.z); sweepDust(head, right.clone().multiplyScalar(Math.cos(novice.phase)), 4); }
-  const grips = [head.clone().addScaledVector(dir, 1.05 * k), head.clone().addScaledVector(dir, 1.5 * k)];
+  const grips = [gR, gL];
   for (const l of fallenLeaves) { const u = l.userData; if (u.fall > 0 || u.fade >= 0) continue; if (Math.hypot(u.x - head.x, u.z - head.z) < 0.75) { u.fade = 0; u.vx = fwd.x * 0.8 + right.x * Math.cos(novice.phase) * 1.2; u.vz = fwd.z * 0.8 + right.z * Math.cos(novice.phase) * 1.2; } }
   const B = n.B, shape = handShape(n.obj); if (!shape || !B.LeftArm) return;
   waiBegin(B);
+  if (B.Spine01) turnBone(B.Spine01, _q2.setFromAxisAngle(side, 0.1)); // bent a little over the work
   [["neck", 0.1], ["Head", 0.12]].forEach(([b, a]) => { if (B[b]) turnBone(B[b], _q2.setFromAxisAngle(side, a)); }); // watching the broom
-  [["Right", grips[0], -1], ["Left", grips[1], 1]].forEach(([s, p, sg]) => {
-    const hs = shape[s], Q = basisQuat(hs.finger, hs.palm, side.clone().multiplyScalar(-sg), fwd.clone().negate());
-    armTo(B, s, p.clone().addScaledVector(side, sg * 0.06), Q, new THREE.Vector3().addScaledVector(up, -1).addScaledVector(side, sg * 0.7), 1);
+  // each hand round the handle: the palm against it, the fingers curled round it and the thumb closed over (his
+  // hands have finger bones); the lower hand from his right and behind, the upper from behind and above
+  const sc = n.obj.getWorldScale(_v1).y, gr = 0.03 * k; // (the handle's radius, and the palm)
+  [["Right", grips[0], right.clone().multiplyScalar(0.6).addScaledVector(fwd, -0.8), new THREE.Vector3().addScaledVector(up, -1).addScaledVector(right, 0.8)],
+   ["Left", grips[1], fwd.clone().multiplyScalar(-0.85).addScaledVector(up, 0.35).addScaledVector(side, 0.2), new THREE.Vector3().addScaledVector(up, -1).addScaledVector(side, 0.7)]].forEach(([s, p, from, pole]) => {
+    const hs = shape[s]; if (!hs) return;
+    const outN = from.clone().addScaledVector(dir, -from.dot(dir)).normalize();      // from the handle out to the back of the hand
+    const fingers = new THREE.Vector3().crossVectors(outN, dir).multiplyScalar(s === "Right" ? -1 : 1).normalize(); // round the handle (the hands are mirror images)
+    const Q = basisQuat(hs.finger, hs.palm, fingers, outN.clone().negate());          // palm toward the handle
+    const centroid = hs.points.reduce((acc, q) => acc.add(q), new THREE.Vector3()).multiplyScalar(1 / hs.points.length).applyQuaternion(Q).multiplyScalar(sc);
+    // placed, closed, then moved by however far the hollow of the fist ended up from the handle (twice: exact)
+    let target = p.clone().addScaledVector(outN, gr).sub(centroid);
+    for (let it = 0; it < 3; it++) {
+      armTo(B, s, target, Q, pole, 1); gripFingers(B, s, 1);
+      if (!B[s + "HandMiddle1"] || !B[s + "HandMiddle3"]) break;
+      const hollow = B[s + "HandMiddle1"].getWorldPosition(new THREE.Vector3()).add(B[s + "HandMiddle3"].getWorldPosition(new THREE.Vector3())).multiplyScalar(0.5);
+      const err = p.clone().sub(hollow);
+      if (err.length() < 0.004) break; target.add(err);
+    }
   });
   waiMark(B);
 }
@@ -5473,11 +5504,13 @@ function handShape(model) {
     const g = sk.geometry, pos = g.attributes.position, si = g.attributes.skinIndex, sw = g.attributes.skinWeight, bones = sk.skeleton.bones;
     for (const side of ["Left", "Right"]) {
       const bi = bones.findIndex((b) => b.name === side + "Hand"); if (bi < 0) { result = null; break; }
+      // the hand with its fingers, where a model has finger bones (LeftHandIndex1 …): measured as one, as before
+      const fingers = bones.map((b, j) => (b.name.startsWith(side + "Hand") && j !== bi ? j : -1)).filter((j) => j >= 0), handSet = new Set([bi, ...fingers]);
       const sc = bones[bi].getWorldScale(new THREE.Vector3()).x / model.getWorldScale(new THREE.Vector3()).x;
       const toLocal = new THREE.Matrix4().multiplyMatrices(sk.skeleton.boneInverses[bi], sk.bindMatrix);
       const pts = [];
       for (let i = 0; i < pos.count; i++) {
-        let wgt = 0; for (let k = 0; k < 4; k++) if (si.getComponent(i, k) === bi) wgt += sw.getComponent(i, k);
+        let wgt = 0; for (let k = 0; k < 4; k++) if (handSet.has(si.getComponent(i, k))) wgt += sw.getComponent(i, k);
         if (wgt > 0.5) pts.push(new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(toLocal).multiplyScalar(sc));
       }
       if (pts.length < 20) { result = null; break; }
@@ -5497,7 +5530,7 @@ function handShape(model) {
       // fingers bend 18 degrees toward the palm); the palm normal is kept square to them
       const finger = tips.reduce((acc, q) => acc.add(q), new THREE.Vector3()).normalize();
       palm.addScaledVector(finger, -palm.dot(finger)).normalize();
-      result[side] = { points: pts, tips, tipY: tips.reduce((acc, q) => acc + q.dot(finger), 0) / tips.length, finger, palm, bone: bi };
+      result[side] = { points: pts, tips, tipY: tips.reduce((acc, q) => acc + q.dot(finger), 0) / tips.length, finger, palm, bone: bi, fingers: fingers.length ? [Math.min(...fingers), Math.max(...fingers)] : [-1, -1] };
     }
   }
   model.userData.waiHands = result;
@@ -5642,13 +5675,16 @@ function lidStep(dt) {
 function pressHands(model) {
   let sk = null; model.traverse((o) => { if (!sk && o.isSkinnedMesh) sk = o; });
   const shape = handShape(model); if (!sk || !shape) return;
-  const u = { uPress: { value: 0 }, uPlane: { value: new THREE.Vector4() }, uHands: { value: new THREE.Vector2(shape.Left.bone, shape.Right.bone) } };
+  const u = { uPress: { value: 0 }, uPlane: { value: new THREE.Vector4() }, uHands: { value: new THREE.Vector2(shape.Left.bone, shape.Right.bone) },
+    uFingL: { value: new THREE.Vector2(...shape.Left.fingers) }, uFingR: { value: new THREE.Vector2(...shape.Right.fingers) } }; // (finger bones, as a range of indices; -1 if none)
   sk.material = sk.material.clone();
   sk.material.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
-    sh.vertexShader = "uniform float uPress; uniform vec4 uPlane; uniform vec2 uHands;\n" + sh.vertexShader.replace("#include <skinning_vertex>", `#include <skinning_vertex>
+    sh.vertexShader = "uniform float uPress; uniform vec4 uPlane; uniform vec2 uHands, uFingL, uFingR;\n" + sh.vertexShader.replace("#include <skinning_vertex>", `#include <skinning_vertex>
       if (uPress > 0.0) {
-        float wl = dot(skinWeight, vec4(equal(skinIndex, vec4(uHands.x)))), wr = dot(skinWeight, vec4(equal(skinIndex, vec4(uHands.y))));
+        vec4 inL = vec4(greaterThanEqual(skinIndex, vec4(uFingL.x))) * vec4(lessThanEqual(skinIndex, vec4(uFingL.y))) * step(0.0, uFingL.x);
+        vec4 inR = vec4(greaterThanEqual(skinIndex, vec4(uFingR.x))) * vec4(lessThanEqual(skinIndex, vec4(uFingR.y))) * step(0.0, uFingR.x);
+        float wl = dot(skinWeight, max(vec4(equal(skinIndex, vec4(uHands.x))), inL)), wr = dot(skinWeight, max(vec4(equal(skinIndex, vec4(uHands.y))), inR));
         float sgn = wl > 0.5 ? 1.0 : (wr > 0.5 ? -1.0 : 0.0);
         float past = sgn * (dot(uPlane.xyz, transformed) + uPlane.w);   // how far past the middle this hand's vertex is
         if (sgn != 0.0 && past > 0.0) transformed -= sgn * uPlane.xyz * past * uPress;
