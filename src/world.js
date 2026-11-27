@@ -3260,11 +3260,24 @@ function kneelStep(before, t) {
 }
 function endKneelingOffering() { const m = kraap.merit; if (m && m.items && !m.placed) scene.remove(m.items); if (m && m.kind === "pet") petDone(); else if (m) { questEvent(m.kind); questEvent("kraap"); /* (an offering before the image ends with the three bows) */ } kraap.merit = null; }
 // the hand's target and turn for a reach (fingers forward and down, palm down), as in poseKraap
-function kneelHand(model, fwd, up, t) {
+function kneelHand(model, fwd, up, t, hand = "Right") {
   const shape = handShape(model); if (!shape) return null;
-  const hs = shape.Right, Q = basisQuat(hs.finger, hs.palm, fwd.clone().addScaledVector(up, -0.4).normalize(), up.clone().negate().addScaledVector(fwd, 0.4).normalize());
-  const along = hs.points.reduce((a, q) => a + q.clone().applyQuaternion(Q).dot(fwd), 0) / hs.points.length * model.getWorldScale(new THREE.Vector3()).y;
-  return { target: kneelReach(t).addScaledVector(fwd, -along - 0.05), Q };
+  const onDog = kraap.merit && kraap.merit.kind === "pet" && pet.who === "dog" && dog.rig, tip = onDog ? 0.12 : 0.4; // (on the dog's head: the hand flat on it)
+  const hs = shape[hand], Q = basisQuat(hs.finger, hs.palm, fwd.clone().addScaledVector(up, -tip).normalize(), up.clone().negate().addScaledVector(fwd, tip).normalize());
+  const sc = model.getWorldScale(new THREE.Vector3()).y, along = hs.points.reduce((a, q) => a + q.clone().applyQuaternion(Q).dot(fwd), 0) / hs.points.length * sc;
+  const target = kneelReach(t).addScaledVector(fwd, -along - 0.05);
+  // stroking the dog: the reach point is on its skin, so the hand rests on it with its lowest part (palm and
+  // fingertips), not with the wrist (which would put the fingers into its head)
+  if (onDog && dog.rig.skull) { // the hand comes down onto its head until it rests on it, wherever the skull is highest under the hand
+    const head = dog.rig.B.Head, skullW = dog.rig.skull.map((p) => head.localToWorld(p.clone()));
+    let lift = -Infinity;
+    for (const q of hs.points) {
+      const p = q.clone().applyQuaternion(Q).multiplyScalar(sc).add(target), top = dogSkullTop(p.x, p.z, skullW);
+      if (top != null) lift = Math.max(lift, top + 0.006 - p.y);
+    }
+    if (lift > -Infinity) target.y += lift;
+  }
+  return { target, Q };
 }
 // envelopes for each offering: reach (to a point), wai (hands together), bow
 function meritState(t) {
@@ -3638,9 +3651,9 @@ function dustStep(dt) {
     sp.scale.setScalar(u.s0 * (1 + 2.2 * t)); sp.material.opacity = 0.85 * Math.min(1, t * 6) * Math.pow(1 - t, 1.5); // (quickly in, slowly out)
   }
 }
-// closing a hand with finger bones round a handle about 3.5 cm thick (measured on the novice's fingers): each finger's
+// closing a hand with finger bones round his broom handle (about 7 cm thick at his size; tried on his fingers): each finger's
 // joints bend toward the palm about their local +x, the thumb closes over; w blends from the open hand
-const GRIP = { f: [0.87, 0.96, 0.61], t: [0.35, 0.44, 0.52] }; // radians: base, middle, last joint; thumb root, knuckle, tip
+const GRIP = { f: [1.2, 1.35, 0.85], t: [0.3, 0.22, 0.18] }; // radians: base, middle, last joint; thumb root, knuckle, tip
 function gripFingers(B, side, w) {
   for (const f of ["Index", "Middle", "Ring", "Pinky", "Thumb"]) for (let j = 1; j <= 3; j++) {
     const b = B[side + "Hand" + f + j]; if (!b) continue;
@@ -3648,6 +3661,8 @@ function gripFingers(B, side, w) {
     b.quaternion.copy(b.userData.rest); b.rotateX((f === "Thumb" ? GRIP.t : GRIP.f)[j - 1] * w);
   }
 }
+const NOVICE_TOP = 2.5; // the top of the handle of his broom, from the ground end of its head
+const NOVICE_REACH = 0.86; // how far from his shoulder the hollow of his fist can be, in arm lengths (shoulder to wrist)
 function noviceStep(dt) {
   dustStep(dt);
   const n = novice.n; if (!n) return;
@@ -3674,10 +3689,25 @@ function noviceStep(dt) {
   // his hands lead and the broom follows: the right hand low before his hip, the left before his chest, both swinging
   // with the stroke; the handle runs through both hands down to the ground, where the broom's head sweeps
   const sw = Math.sin(novice.phase), gy = groundAt(x, z);
-  const gR = new THREE.Vector3(x, gy + 1.17 * k, z).addScaledVector(fwd, 0.5 * k).addScaledVector(right, (0.14 + sw * 0.18) * k);
-  const gL = new THREE.Vector3(x, gy + 1.52 * k, z).addScaledVector(fwd, 0.32 * k).addScaledVector(right, (0.03 + sw * 0.08) * k);
+  // (his hips are about 1.58 up and his shoulders 2.08, his arms 0.79 long: the lower hand just under the hip, the upper at the chest)
+  const gR = new THREE.Vector3(x, gy + 1.45 * k, z).addScaledVector(fwd, 0.42 * k).addScaledVector(right, (0.2 + sw * 0.14) * k);
+  const gL = new THREE.Vector3(x, gy + 1.85 * k, z).addScaledVector(fwd, 0.3 * k).addScaledVector(right, (0.02 + sw * 0.07) * k);
   const dir = gL.clone().sub(gR).normalize();
   const head = gR.clone().addScaledVector(dir, -(gR.y - gy) / Math.max(0.2, dir.y)); head.y = gy;
+  // each hand where it can reach the handle, the elbow a little bent: out of reach (the lower hand, at the end of the
+  // stroke), it holds the handle at the nearest point it can reach instead (the handle itself stays where it is)
+  const B0 = n.B;
+  [["Right", gR], ["Left", gL]].forEach(([s, g]) => {
+    const A = B0[s + "Arm"], F = B0[s + "ForeArm"], H = B0[s + "Hand"]; if (!A || !F || !H) return;
+    const S = A.getWorldPosition(new THREE.Vector3()), fw = F.getWorldPosition(new THREE.Vector3());
+    const R = (S.distanceTo(fw) + fw.distanceTo(H.getWorldPosition(new THREE.Vector3()))) * NOVICE_REACH, v = g.clone().sub(S);
+    if (v.length() <= R) return;
+    const b = v.dot(dir), disc = b * b - v.lengthSq() + R * R; // |g + t·dir − S| = R
+    const t = disc < 0 ? -b : [-b - Math.sqrt(disc), -b + Math.sqrt(disc)].reduce((a, c) => (Math.abs(c) < Math.abs(a) ? c : a));
+    g.addScaledVector(dir, t);
+  });
+  // and both on the handle itself, between the tie and its top end (never past either)
+  [gR, gL].forEach((g) => { const a = g.clone().sub(head).dot(dir), c = Math.min(NOVICE_TOP - 0.07, Math.max(0.7, a)); if (c !== a) g.addScaledVector(dir, c - a); });
   novice.broom.position.copy(head); novice.broom.quaternion.setFromUnitVectors(up, dir);
   if (!settings.calmMotion && Math.random() < dt * 5) sweepDust(head, right.clone().multiplyScalar(Math.cos(novice.phase)), 1); // a light trickle along the stroke
   if (Math.floor(novice.phase / Math.PI) !== stroke) { sound.sweep(head.x, 0.1, head.z); sweepDust(head, right.clone().multiplyScalar(Math.cos(novice.phase)), 4); }
@@ -4009,6 +4039,8 @@ setTimeout(() => {
   loadNpc("novice", 2.95).then((n) => {
     if (!n) return; novice.n = n;
     novice.broom = broom.obj.clone(); scene.add(novice.broom);
+    // his own broom has a longer handle (he is taller than the boy, and holds it higher up): from the tie to NOVICE_TOP
+    const h = novice.broom.children[0]; h.geometry = new THREE.CylinderGeometry(0.034, 0.038, NOVICE_TOP - 0.25, 10); h.position.y = (0.25 + NOVICE_TOP) / 2;
   });
 }, 1500);
 
@@ -4732,6 +4764,7 @@ function animateDog(mat) {
 // it comes and sits in front of him, facing him; he strokes its head from the front while it wags hard and nuzzles up into his
 // hand; then it gets up and follows him again. Walking off calls it off.
 const DOG_PET_D = 1.15, DOG_LIE = 4.5;
+const PET_REACH_RIG = 0.55, PET_SIDE_RIG = 0.4; // the rigged dog: its crown at least this far in front of him, and this far to one side
 const PET_REACH = 0.45, PET_RIGHT = 0.1, PET_TOES = 0.2, PET_BODY = 0.3; // stroking the dog: its head this far in front of him and this far to his right; his feet this far from its body
 let pet = { who: null, phase: null, t: 0, yaw: 0, spot: null };
 function petBusy() { return sit.on || kraap.t >= 0 || alms.t >= 0 || shoes.t >= 0 || feed.t >= 0 || merit.t >= 0 || pet.phase === "call" || pet.phase === "on"; }
@@ -4752,10 +4785,11 @@ function petStep(dt) {
   if (pet.phase === "call") {
     if (moved || pet.t > 8) { pet.phase = null; return; } // walked off, or it couldn't come
     if (pet.who === "dog" && Math.hypot(dog.x - pet.spot.x, dog.z - pet.spot.z) < 0.5 && dogAnim.sit.value > 0.8 && (!dog.rig || (dog.rig.cur === dog.rig.A.sit && dog.rig.cur.time > 0.2)) /* (the rigged dog: once it has sat down) */ && Math.abs(Math.atan2(Math.sin(dog.yaw - pet.yaw), Math.cos(dog.yaw - pet.yaw))) < 0.15) {
-      // face to face: he stands before the dog, its head within reach of his right hand, and leans over a little to
-      // stroke it (sitting, the dog is as tall as a kneeling child)
-      const { at, fy, R } = petSpot(petStroke(0));
-      pet.phase = "on"; startKneelingOffering({ kind: "pet", near: at, far: at, faceYaw: fy, stand: true, lean: 0.22 + (R - PET_REACH) * 0.6 }); // (further off, he leans further over)
+      // face to face: he stands before the dog, its head within reach of one hand, and leans over a little to stroke it
+      // (sitting, the dog is as tall as a kneeling child)
+      if (dog.rig) dogCrownSurface();
+      const { at, fy, R, hand } = petSpot(petStroke(0));
+      pet.phase = "on"; startKneelingOffering({ kind: "pet", near: at, far: at, faceYaw: fy, stand: true, hand, lean: dog.rig ? 0.1 + (R - PET_REACH_RIG) * 0.5 : 0.22 + (R - PET_REACH) * 0.6 }); // (further off, he leans further over)
     }
   } else if (pet.phase === "after") {
     if (pet.t > DOG_LIE + 1.2 || Math.hypot(player.x - dog.x, player.z - dog.z) > 5) pet.phase = null;
@@ -4796,9 +4830,17 @@ function petSpot(hd) {
 function petSpotRig(hd) {
   const B = dog.rig.B, fy = pet.yaw + Math.PI, fx = Math.sin(fy), fz = Math.cos(fy), w = new THREE.Vector3();
   const out = (bone, pad) => { if (!bone) return 0; bone.getWorldPosition(w); return -((w.x - hd.x) * fx + (w.z - hd.z) * fz) + pad; };
-  const paws = Math.max(out(B.LeftFrontPaw, 0.12), out(B.RightFrontPaw, 0.12)), chest = Math.max(out(B.Chest, 0.3), out(B.Neck1, 0.22));
-  const Rr = Math.max(PET_REACH + 0.15, paws + PET_TOES + 0.55, chest + PET_BODY + 0.35); // (his shoes and knees need more room than the classic dog's sums allowed)
-  return { at: { x: hd.x - fx * Rr + fz * PET_RIGHT, z: hd.z - fz * Rr - fx * PET_RIGHT }, fy, R: Rr };
+  // Its head is long (the crown, where he strokes, is two thirds of a metre behind its nose), so he doesn't stand
+  // square before it: its head is a little to one side of him, its muzzle passing beside his hip, and he reaches over to the
+  // crown; his feet stay clear of its front paws, his chest of its neck and chest
+  const paws = Math.max(out(B.LeftFrontPaw, 0.1), out(B.RightFrontPaw, 0.1)), chest = Math.max(out(B.Chest, 0.3), out(B.Neck1, 0.2));
+  // (it sits with its head turned a little, its body off to one side of it: he stands on the other side, and strokes
+  // with the hand nearer its head)
+  const L = new THREE.Vector3(fz, 0, -fx), mid = new THREE.Vector3(); // (his left)
+  if (B.LeftFrontPaw && B.RightFrontPaw) mid.copy(B.LeftFrontPaw.getWorldPosition(w)).add(B.RightFrontPaw.getWorldPosition(w)).multiplyScalar(0.5); else mid.copy(hd);
+  const o = (mid.sub(hd).dot(L) > 0 ? -1 : 1) * PET_SIDE_RIG; // his offset to the left of its head (negative: to the right)
+  const Rr = Math.max(PET_REACH_RIG, paws + 0.36, chest + 0.32); // (his toes reach 0.4 m ahead of him)
+  return { at: { x: hd.x - fx * Rr + L.x * o, z: hd.z - fz * Rr + L.z * o }, fy, R: Rr, hand: o > 0 ? "Right" : "Left" };
 }
 // the crown of the rigged dog's head, in the head bone's own space (worked out once, in the pose it loads in)
 function dogCrown() {
@@ -4810,11 +4852,32 @@ function dogCrown() {
   R.crown = head.worldToLocal(hw.clone().add(back).setY(hw.y + (top - hw.y) * 0.55));
   return R.crown;
 }
+// the top of its skull, on the skin itself (the crown above is inside the head): found once petting starts, as its
+// clip has posed it, from the points of the mesh that move with the head bone alone (not its floppy ears), and kept
+// in the head bone's space so it moves with the head
+function dogCrownSurface() {
+  const R = dog.rig, m = R.mesh; R.crownSurf = null; if (!m) return;
+  dog.obj.updateMatrixWorld(true);
+  const hi = m.skeleton.bones.indexOf(R.B.Head), si = m.geometry.attributes.skinIndex, sw = m.geometry.attributes.skinWeight, v = new THREE.Vector3(), pts = [];
+  for (let i = 0; i < si.count; i++) {
+    let w = 0; for (let k = 0; k < 4; k++) if (si.getComponent(i, k) === hi) w += sw.getComponent(i, k);
+    if (w > 0.6) pts.push(m.localToWorld(m.getVertexPosition(i, v)).clone());
+  }
+  if (!pts.length) return;
+  const top = Math.max(...pts.map((p) => p.y)), crown = pts.filter((p) => p.y > top - 0.012);
+  R.crownSurf = R.B.Head.worldToLocal(crown.reduce((a, p) => a.add(p), new THREE.Vector3()).multiplyScalar(1 / crown.length));
+  R.skull = pts.filter((p) => p.y > top - 0.12).map((p) => R.B.Head.worldToLocal(p.clone())); // (the top of its head, for the hand to rest on)
+}
+// how high the top of its head is under a point (from the skull's points near it), or null if it isn't under it
+function dogSkullTop(x, z, skullW) {
+  let y = -Infinity; for (const p of skullW) if ((p.x - x) * (p.x - x) + (p.z - z) * (p.z - z) < 0.0006) y = Math.max(y, p.y); // (within 2.5 cm)
+  return y === -Infinity ? null : y;
+}
 function petStroke(t) {
   if (pet.who === "cat") return catStroke(t);
-  if (dog.rig) {
-    const head = dog.rig.B.Head, back = new THREE.Vector3(Math.sin(dog.yaw), 0, Math.cos(dog.yaw)).multiplyScalar(-(0.03 + 0.06 * Math.sin(t * 4)));
-    return head.localToWorld(dogCrown().clone()).add(back).add(new THREE.Vector3(0, -0.03 + 0.05 * dogAnim.nuzzle.value * (0.5 + 0.5 * Math.sin(dogAnim.time.value * 5)), 0));
+  if (dog.rig) { // on the skin of its crown, from the forehead back a little, and back; lifted a little as it nuzzles up into his hand
+    const head = dog.rig.B.Head, back = new THREE.Vector3(Math.sin(dog.yaw), 0, Math.cos(dog.yaw)).multiplyScalar(-(0.015 + 0.025 * Math.sin(t * 4)));
+    return head.localToWorld((dog.rig.crownSurf || dogCrown()).clone()).add(back).add(new THREE.Vector3(0, 0.02 * dogAnim.nuzzle.value * (0.5 + 0.5 * Math.sin(dogAnim.time.value * 5)), 0));
   }
   const mesh = dog.model && dog.model.getObjectByProperty("isMesh", true); if (!mesh) return new THREE.Vector3(dog.x, 1.2, dog.z);
   if (!dogHead) { // the top of the head, in the model's own space (head toward +x, paws at y = -0.634)
@@ -6014,8 +6077,15 @@ function poseKraap(model, B, st) {
   const scale = model.getWorldScale(new THREE.Vector3()).y;
   const floor = kraap.floorY + (insideHall(kraap.spot.x, kraap.spot.z) ? 0 : PAVING);
   const rest = restPose(model);
+  // standing to pet the dog: square to it, feet side by side (the idle stands turned, one foot out toward the dog)
+  const sq = kraap.merit && kraap.merit.stand ? smooth(0, 0.8, kraap.t) * (1 - smooth(6.9, 8.1, kraap.t)) : 0;
+  if (sq > 0 && B.Hips && B.LeftUpLeg && B.RightUpLeg) {
+    model.updateMatrixWorld(true);
+    const hipLine = B.LeftUpLeg.getWorldPosition(new THREE.Vector3()).sub(B.RightUpLeg.getWorldPosition(new THREE.Vector3())).setY(0).normalize();
+    turnBone(B.Hips, _q2.slerpQuaternions(_q1.identity(), new THREE.Quaternion().setFromUnitVectors(hipLine, side), sq));
+  }
   // a straight back and head, facing straight ahead (out of the standing animation's lean and glancing)
-  if (rest) ["Spine02", "Spine01", "Spine", "neck", "Head"].forEach((n) => { if (B[n] && rest[n]) B[n].quaternion.slerp(rest[n], st.kneel); });
+  if (rest) ["Spine02", "Spine01", "Spine", "neck", "Head"].forEach((n) => { if (B[n] && rest[n]) B[n].quaternion.slerp(rest[n], Math.max(st.kneel, sq)); });
   model.updateMatrixWorld(true);
   const wp = (n) => B[n].getWorldPosition(new THREE.Vector3());
   // his measurements, from this frame's standing pose
@@ -6027,6 +6097,17 @@ function poseKraap(model, B, st) {
   // 1)+2) hips and legs: kneeling, rising as he bows
   const touch = st.kneel > 0.99 ? kraapTouch(model, B, c) : (kraap.touch || { theta: 1.6, fwd: 1.0 });
   poseLowerBody(model, B, c, st.kneel, st.bow, PELVIS_SHARE * touch.theta * st.bow);
+  if (sq > 0.001) { // standing to pet the dog: both feet under his hips, side by side and pointing ahead (the idle steps one well forward)
+    model.updateMatrixWorld(true);
+    const o = new THREE.Vector3(player.x, 0, player.z);
+    [["Left", 1], ["Right", -1]].forEach(([sd, sg]) => {
+      const H = wp(sd + "UpLeg"), ft = wp(sd + "Foot"), tb = B[sd + "ToeBase"] && wp(sd + "ToeBase"); if (!tb) return;
+      const across = Math.max(sg * H.clone().sub(o).dot(side), 0.07 * scale) + 0.02 * scale; // (hip width, a little apart)
+      const ankle = o.clone().addScaledVector(fwd, H.clone().sub(o).dot(fwd) - 0.02 * scale).addScaledVector(side, sg * across).setY(ft.y);
+      const toe = ankle.clone().addScaledVector(fwd, Math.hypot(tb.x - ft.x, tb.z - ft.z)).addScaledVector(side, sg * 0.01 * scale).setY(tb.y);
+      legTo(B, sd, ankle, toe, fwd.clone().addScaledVector(up, -0.2), sq);
+    });
+  }
   // 3) the bow: the rest of the fold in the back, the neck and head bowing until the forehead touches the floor
   applyBow(B, axis, (1 - PELVIS_SHARE) * touch.theta * st.bow, st.bow, st.high);
   model.updateMatrixWorld(true);
@@ -6060,7 +6141,8 @@ function poseKraap(model, B, st) {
   const mainTip = st.high >= st.chest ? (high ? WAI_LEVELS.buddha.tip : null) : (chest ? CHEST_TIP : null);
   if (mainTip != null) waiHands(model, B, mainTip, side, up, fwd, st.chest + st.high); else wai.plane.on = 0;
   const jointsNow = wp("LeftUpLeg").add(wp("RightUpLeg")).multiplyScalar(0.5);
-  const reachT = st.reach > 0.001 && kraap.merit ? kneelHand(model, fwd, up, kraap.t) : null;
+  const rh = (kraap.merit && kraap.merit.hand) || "Right"; // the hand that reaches (the other rests on his thigh)
+  const reachT = st.reach > 0.001 && kraap.merit ? kneelHand(model, fwd, up, kraap.t, rh) : null;
   [["Left", 1], ["Right", -1]].forEach(([s, sg]) => {
     const hs = shape[s];
     // palms flat on the floor: fingers forward, palm down, either side of the forehead
@@ -6077,10 +6159,10 @@ function poseKraap(model, B, st) {
     if (high) addIn(st.high, high[s].target, high[s].Q, high.pole(sg));
     addIn(st.floor, floorT, Qf, floorPole);
     if (trayT) addIn(st.tray, trayT[s].target, trayT[s].Q, trayT[s].pole);
-    if (s === "Right" && reachT) addIn(st.reach, reachT.target, reachT.Q, new THREE.Vector3().addScaledVector(up, -1).addScaledVector(side, -0.6));
-    if (s === "Left" && reachT) { // the free hand rests on his thigh, palm down
-      const thighT = wp("LeftUpLeg").lerp(wp("LeftLeg"), 0.6).addScaledVector(up, palmTop + 0.06 * scale).sub(centroid.clone().setY(0));
-      addIn(st.reach, thighT, Qf, side.clone().multiplyScalar(0.8).addScaledVector(fwd, -0.4));
+    if (s === rh && reachT) addIn(st.reach, reachT.target, reachT.Q, new THREE.Vector3().addScaledVector(up, -1).addScaledVector(side, sg * 0.6));
+    else if (reachT) { // the free hand rests on his thigh, palm down
+      const thighT = wp(s + "UpLeg").lerp(wp(s + "Leg"), 0.6).addScaledVector(up, palmTop + 0.06 * scale).sub(centroid.clone().setY(0));
+      addIn(st.reach, thighT, Qf, side.clone().multiplyScalar(sg * 0.8).addScaledVector(fwd, -0.4));
     }
     if (acc > 0.001) armTo(B, s, target, Q, pole, Math.min(1, acc));
   });
