@@ -1526,8 +1526,8 @@ function spire(h, k = 0.85) {
   props("table", 0.8, [[-2.2, -1.2, 0, FY]], { parent: g }); h.post(-2.2, -1.2, 0.8);
   props("bench", 1.1, [[-2.2, 0.4, Math.PI, FY]], { parent: g });
   // the dog's bed: a round cushion by the wall
-  add(new THREE.CylinderGeometry(0.8, 0.85, 0.22, 28), S(0x4f9a5d, { roughness: 0.95 }), 2.6, FY + 0.11, -2, g);
-  add(new THREE.TorusGeometry(0.8, 0.14, 10, 32), S(0x3f7f4a, { roughness: 0.95 }), 2.6, FY + 0.25, -2, g).rotation.x = Math.PI / 2;
+  add(new THREE.CylinderGeometry(1.1, 1.15, 0.22, 32), S(0x4f9a5d, { roughness: 0.95 }), 2.6, FY + 0.11, -2, g); // (big enough for the dog to lie in)
+  add(new THREE.TorusGeometry(1.1, 0.16, 10, 36), S(0x3f7f4a, { roughness: 0.95 }), 2.6, FY + 0.25, -2, g).rotation.x = Math.PI / 2;
   props("potplant", 1.5, [[W / 2 - 0.9, D / 2 - 0.9, 0, FY], [-W / 2 + 0.9, D / 2 - 0.9, 1, FY]], { parent: g });
 }
 
@@ -4504,9 +4504,9 @@ const dog = { obj: new THREE.Group(), x: 3, z: 90, y: 0, yaw: Math.PI };
     const m = fitTo(obj, 1.7); // (faces +z already)
     dog.obj.add(m); dog.model = m;
     const mixer = new THREE.AnimationMixer(obj), A = {};
-    g.animations.forEach((c) => { const a = mixer.clipAction(c); if (/_(down|up)$|^shake$|^head_tilt$/.test(c.name)) { a.setLoop(THREE.LoopOnce); a.clampWhenFinished = true; } A[c.name] = a; });
+    g.animations.forEach((c) => { const a = mixer.clipAction(c); if (/_(down|up)$|^(shake|head_tilt|yawn|stretch|give_paw|greeting|sit_scratch)$/.test(c.name)) { a.setLoop(THREE.LoopOnce); a.clampWhenFinished = true; } A[c.name] = a; });
     const B = {}; obj.traverse((o) => { if (o.isBone) B[o.name] = o; });
-    dog.rig = { mixer, A, B, state: null, cur: null, busy: 0, mesh: obj.getObjectByProperty("isSkinnedMesh", true) };
+    dog.rig = { mixer, A, B, pose: "stand", cur: null, busy: 0, then: null, act: null, actT: 0, easeT: 0, nextAct: 3, mesh: obj.getObjectByProperty("isSkinnedMesh", true) };
     dog.obj.updateMatrixWorld(true); dogCrown();
     dogPlay("idle", 0);
   }, undefined, () => loadClassicDog());
@@ -4527,31 +4527,85 @@ function loadClassicDog() {
     dog.obj.add(m); dog.model = m;
   });
 }
-// the rigged dog: cross-fade to a clip (a one-off clip, such as sitting down, holds the dog until it ends)
+// What the rigged dog does. Where it goes is decided as before (following him, sitting through ceremonies, waiting
+// outside the shrine halls, being petted); the rig shows it, and when he stands still nearby the dog is at ease and
+// goes about a dog's own business, more relaxed the longer he stays: it looks about, sniffs, yawns, stretches, shakes,
+// tilts its head, now and then chases its tail; then sits (and scratches), lies down, and in the end rolls onto its
+// side or its back, or dozes. It drinks when it is at the edge of a pond, greets him when he comes back after a while,
+// may roll onto its back for him after being petted, and sleeps in its bed in the kuti when he is there (or at night
+// near it). Each lying or sitting pose has its own way down and up; a dog that is down gets up before it walks.
+const DOG_WALK = 2.19, DOG_TROT = 4.89, DOG_RUN = 9.5; // world units a second at which the walk, trot and run keep the paws planted
+const DOG_POSES = { sit: ["sit_down", "sit", "sit_up"], lie: ["lie_down", "lie", "lie_up"], sleep: ["lie_down", "sleep", "lie_up"], belly: ["belly_down", "belly", "belly_up"], side: ["side_down", "side", "side_up"], bow: ["play_bow_down", "play_bow", "play_bow_up"] };
 function dogPlay(name, fade = 0.25) {
-  const R = dog.rig, a = R && R.A[name]; if (!a || R.cur === a) return;
+  const R = dog.rig, a = R && R.A[name]; if (!a) return false; if (R.cur === a) return true;
   a.reset().setEffectiveWeight(1).play();
   if (R.cur) R.cur.crossFadeTo(a, fade, false); else a.fadeIn(fade);
   R.cur = a; R.busy = a.loop === THREE.LoopOnce ? a.getClip().duration - 0.05 : 0;
+  return true;
 }
-// what the dog does follows the same numbers as before (dogAnim.sit / lie, its speed); the rig only shows it: walk or
-// trot in step with its speed, sit down and stand up, lie down and get up, stand about
-const DOG_WALK = 2.19, DOG_TROT = 4.89; // world units a second at which the walk and the trot clips keep the paws planted
+// a standing activity: a clip for a while (a one-off clip lasts as long as it takes)
+function dogAct(name, secs) { const R = dog.rig; if (!R.A[name]) return; R.act = name; R.actT = secs || (R.A[name].loop === THREE.LoopOnce ? R.A[name].getClip().duration : 3); dogPlay(name, 0.3); }
+const dogHolds = () => dog.rig && (dog.rig.pose !== "stand" || dog.rig.busy > 0 || dog.rig.hold > 0); // down, getting up, or greeting: not yet ready to walk
+function dogEasePick(R) {
+  const t = R.easeT, calm = settings.calmMotion, r = Math.random();
+  const nearWater = ponds.some((p) => Math.abs(Math.hypot(dog.x - p.x, dog.z - p.z) - p.r) < 1.3);
+  if (R.pose === "stand") {
+    if (nearWater && r < 0.5) { const p = ponds.find((q) => Math.abs(Math.hypot(dog.x - q.x, dog.z - q.z) - q.r) < 1.3); dog.yaw = Math.atan2(p.x - dog.x, p.z - dog.z); dogAct("drink", 5); return 6; }
+    if (t > 26) { R.easePose = calm ? "lie" : r < 0.45 ? "lie" : r < 0.75 ? "side" : r < 0.9 ? "belly" : "sleep"; return 8; }
+    if (t > 14 && r < 0.6) { R.easePose = "sit"; return 6 + Math.random() * 6; }
+    const pick = calm ? ["look_around", "sniff", "yawn"] : ["look_around", "sniff", "sniff", "yawn", "stretch", "shake", "head_tilt", "chase_tail"];
+    const a = pick[Math.floor(Math.random() * pick.length)];
+    if (a === "chase_tail" && Math.random() < 0.6) { dogAct("look_around", 4); return 5; } // (rarely)
+    dogAct(a, a === "look_around" ? 4 + Math.random() * 3 : a === "sniff" ? 4 : a === "chase_tail" ? 4 : 0);
+    return (R.actT || 3) + 1.5 + Math.random() * 3;
+  }
+  if (R.pose === "sit") { if (!calm && r < 0.35 && R.A.sit_scratch) { dogPlay("sit_scratch", 0.2); R.then = "sit"; return 7; } if (t > 26) { R.easePose = r < 0.5 ? "lie" : "side"; return 8; } return 5; }
+  if (R.pose === "lie" && t > 45 && r < 0.5) { R.easePose = "sleep"; return 20; }
+  return 8;
+}
 function dogRigStep(dt, speed) {
   const R = dog.rig; if (!R) return;
-  R.busy = Math.max(0, R.busy - dt);
-  const want = dogAnim.lie.value > 0.5 ? "lie" : dogAnim.sit.value > 0.5 ? "sit" : speed > 0.5 ? (speed > 3.6 ? "trot" : "walk") : "idle";
-  if (!R.busy && want !== R.state) {
-    const from = R.state; R.state = want;
-    if (from === "sit" && want !== "lie") { dogPlay("sit_up", 0.15); R.state = "standing"; }
-    else if (from === "lie") { dogPlay("lie_up", 0.15); R.state = "standing"; }
-    else if (want === "sit") { dogPlay("sit_down", 0.2); R.next = "sit"; }
-    else if (want === "lie") { dogPlay(from === "sit" ? "lie_down" : "lie_down", 0.2); R.next = "lie"; }
-    else dogPlay(want, 0.25);
+  R.busy = Math.max(0, R.busy - dt); R.hold = Math.max(0, (R.hold || 0) - dt);
+  if (dog.greet && (dog.greetT = (dog.greetT || 0) + dt) > 12) { dog.greet = 0; dog.greetT = 0; } // (it never reached him)
+  // just petted: now and then it rolls onto its back for a belly rub
+  const petNow = pet.who === "dog" ? pet.phase : null;
+  if (R.petWas === "on" && !petNow && !settings.calmMotion && Math.random() < 0.5) { R.easePose = "belly"; R.easeT = Math.max(R.easeT, 20); R.nextAct = 6; R.bellyFor = 10; }
+  R.petWas = petNow;
+  if (R.bellyFor > 0 && (R.bellyFor -= dt) <= 0 && R.easePose === "belly") { R.easePose = "stand"; R.nextAct = 3; }
+  // where it is: its bed (it lies a little higher, on the cushion)
+  const bed = dog.bedAt && Math.hypot(dog.x - dog.bedAt.x, dog.z - dog.bedAt.z) < 0.5;
+  // the pose it should be in
+  let want = "stand";
+  if (speed > 0.5) want = "stand";
+  else if (dogAnim.lie.value > 0.5) want = R.lieKind || (R.lieKind = Math.random() < 0.5 && !settings.calmMotion ? "belly" : "lie"); // after petting: down, or onto its back
+  else if (dogAnim.sit.value > 0.5) want = "sit";
+  else if (bed) want = "sleep";
+  else if (dog.wantGo) want = "stand";
+  else if (dog.atEase) want = R.easePose || "stand";
+  if (dogAnim.lie.value < 0.2) R.lieKind = null;
+  if (!dog.atEase) { R.easeT = 0; R.easePose = null; R.nextAct = 2 + Math.random() * 3; }
+  if (!R.busy) {
+    if (R.then) { dogPlay(R.then, 0.2); R.then = null; }
+    else if (want !== R.pose) {
+      if (R.pose !== "stand" && want !== "stand" && DOG_POSES[R.pose][0] === DOG_POSES[want][0]) { dogPlay(DOG_POSES[want][1], 1.2); R.pose = want; } // (lying to dozing: it just settles)
+      else if (R.pose !== "stand") { dogPlay(DOG_POSES[R.pose][2], 0.2); R.pose = "stand"; R.then = null; }
+      else { dogPlay(DOG_POSES[want][0], 0.2); R.then = DOG_POSES[want][1]; R.pose = want; R.act = null; }
+    } else if (R.pose === "stand") {
+      if (speed > 0.5) { R.act = null; dogPlay(speed > DOG_RUN * 0.8 ? "run" : speed > 3.6 ? "trot" : "walk", 0.2); }
+      else if (dog.greet && Math.hypot(player.x - dog.x, player.z - dog.z) < 7.5) { dog.greet = 0; R.hold = 2.4; R.act = null; if (settings.calmMotion) dogAct("wag", 2); else if (Math.random() < 0.5) dogAct("happy_dance", 2.4); else { dogPlay("play_bow_down", 0.2); R.then = "play_bow_up"; } }
+      else if (R.act && (R.actT -= dt) > 0) { /* busy with it */ }
+      else { R.act = null; dogPlay("idle", 0.35); }
+    }
   }
-  if (!R.busy && R.next && R.cur && R.cur.loop === THREE.LoopOnce) { dogPlay(R.next, 0.2); R.next = null; }
+  // at ease: a new activity now and then
+  if (dog.atEase && speed <= 0.5 && !R.busy && !R.act) { R.easeT += dt; if ((R.nextAct -= dt) <= 0) R.nextAct = dogEasePick(R); }
+  else if (dog.atEase) R.easeT += dt;
   if (R.cur === R.A.walk) R.cur.timeScale = THREE.MathUtils.clamp(speed / DOG_WALK, 0.6, 1.8);
-  else if (R.cur === R.A.trot) R.cur.timeScale = THREE.MathUtils.clamp(speed / DOG_TROT, 0.7, 2.6);
+  else if (R.cur === R.A.trot) R.cur.timeScale = THREE.MathUtils.clamp(speed / DOG_TROT, 0.7, 2.0);
+  else if (R.cur === R.A.run) R.cur.timeScale = THREE.MathUtils.clamp(speed / DOG_RUN, 0.7, 1.6);
+  else if (R.cur) R.cur.timeScale = 1;
+  if (dog.lids) dog.lids.want = R.pose === "sleep" || (R.pose === "side" && R.easeT > 40) ? 1 : 0;
+  dog.model.position.y = bed ? 0.22 : 0;
   R.mixer.update(dt * (settings.calmMotion ? 0.85 : 1));
 }
 
@@ -5571,7 +5625,7 @@ function kidEyes() { // the child's own eyes: shut while sitting in meditation, 
   }
 }
 function eyesStep(dt) {
-  if (dog.lids) dog.lids.want = dogAnim.lie.value > 0.6 ? 1 : 0;
+  if (dog.lids && !dog.rig) dog.lids.want = dogAnim.lie.value > 0.6 ? 1 : 0; // (the rigged dog's are set with its pose)
   lidStep(dt);
 }
 // a blink every 2 to 6.5 seconds, a fifth of a second long; lids that should stay shut close and open slowly
@@ -7391,16 +7445,43 @@ function frame(dt) {
     const petting = pet.who === "dog" ? pet.phase : null;
     if (petting === "call" || petting === "on") { bx = pet.spot.x; bz = pet.spot.z; }
     else if (petting === "after") { bx = dog.x; bz = dog.z; }
+    // (the rigged dog) its bed in the kuti: there while he is in or at the kuti, and at night near it; and at ease:
+    // when he stands still nearby it stays where it is, rather than following every turn of the camera
+    const pv = dt > 0 && dog.px != null ? Math.hypot(player.x - dog.px, player.z - dog.pz) / dt : 0; dog.px = player.x; dog.pz = player.z;
+    dog.still = pv < 0.4 ? (dog.still || 0) + dt : 0;
+    const free = !ceremony && !waiting && !petting && !withNovice;
+    dog.bedAt = null;
+    if (dog.rig && free && salas.care) {
+      const c = salas.care, cd = Math.hypot(player.x - c.g.position.x, player.z - c.g.position.z);
+      if (cd < Math.max(c.W, c.D) / 2 + 1.5 || (night.on && cd < 14)) {
+        const b = c.g.localToWorld(new THREE.Vector3(2.6, 0, -2)); dog.bedAt = { x: b.x, z: b.z }; bx = b.x; bz = b.z;
+        if (!insideHall(dog.x, dog.z)) { // in by the door, round the kuti if it is behind or beside it
+          const L = c.g.worldToLocal(new THREE.Vector3(dog.x, 0, dog.z)), side = c.W / 2 + 1.3, front = c.D / 2 + 1.2, mid = c.g.worldToLocal(new THREE.Vector3(0, 0, 0)), sg = mid.x < 0 ? -1 : 1; // (round the side toward the temple's middle, away from its wall)
+          const w = L.z > c.D / 2 + 0.8 ? new THREE.Vector3(0, 0, c.D / 2 + 0.6) : Math.abs(L.x - sg * side) > 0.5 ? new THREE.Vector3(sg * side, 0, Math.min(L.z, front)) : new THREE.Vector3(sg * side, 0, front);
+          const door = c.g.localToWorld(w); if (Math.hypot(dog.x - door.x, dog.z - door.z) > 0.7 || L.z <= c.D / 2 + 0.8) { bx = door.x; bz = door.z; }
+        }
+      }
+    }
+    if (dog.rig && !dog.bedAt && salas.care && insideHall(dog.x, dog.z)) { // in the kuti, and he is elsewhere: out by the door first
+      const c = salas.care, L = c.g.worldToLocal(new THREE.Vector3(dog.x, 0, dog.z));
+      if (Math.abs(L.x) < c.W / 2 + 0.2 && Math.abs(L.z) < c.D / 2 + 0.2) { const out = c.g.localToWorld(new THREE.Vector3(0, 0, c.D / 2 + 1.2)); bx = out.x; bz = out.z; }
+    }
+    dog.atEase = !!dog.rig && free && !dog.bedAt && dog.still > 1.2 && Math.hypot(player.x - dog.x, player.z - dog.z) < 6;
+    if (dog.atEase) { bx = dog.x; bz = dog.z; }
+    // coming back to him after waiting a while outside a hall: it greets him
+    if (waiting) dog.waitedFor = dog.waitT; else if (dog.waitedFor > 8) { dog.greet = 1; dog.waitedFor = 0; } else dog.waitedFor = 0;
     const ddx = bx - dog.x, ddz = bz - dog.z, dd = Math.hypot(ddx, ddz);
+    dog.wantGo = dd > 0.4;
     const wantSit = (ceremony || waiting || petting === "call" || petting === "on") && dd < 0.5;
     const wantLie = petting === "after" && pet.t > 0.5 && pet.t < DOG_LIE;
     dogAnim.sit.value += ((wantSit && !wantLie ? 1 : 0) - dogAnim.sit.value) * Math.min(1, dt * 3);
     dogAnim.lie.value += ((wantLie ? 1 : 0) - dogAnim.lie.value) * Math.min(1, dt * 2.2);
     dogAnim.nuzzle.value += ((petting === "on" && kraap.t >= 0 && kraapState(kraap.t).reach > 0.6 ? 1 : 0) - dogAnim.nuzzle.value) * Math.min(1, dt * 3);
-    const dogFree = dogAnim.sit.value < 0.15 && dogAnim.lie.value < 0.15; // a sitting or lying dog gets up before it walks
+    const dogFree = dogAnim.sit.value < 0.15 && dogAnim.lie.value < 0.15 && !dogHolds(); // a sitting or lying dog gets up before it walks
     dog.moving = dd > 0.4 && dogFree;
     let dogSpeed = 0;
     if (wantLie) { let dy = pet.yaw - dog.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); dog.yaw += dy * Math.min(1, dt * 2.5); } // lies down alongside him, where it sat
+    if (dog.bedAt && dd < 0.5) { let dy = -Math.PI / 2 + (salas.care ? salas.care.g.rotation.y : 0) - dog.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); dog.yaw += dy * Math.min(1, dt * 2); }
     if (wantSit) { let dy = (withNovice ? novice.n.holder.rotation.y : waiting ? waitAt.yaw : petting ? pet.yaw : player.yaw) - dog.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); dog.yaw += dy * Math.min(1, dt * 4); }
     if (dd > 0.4 && dogFree) { const st = Math.min(dd, dt * (dd > 6 ? 12 : 6)); dogSpeed = dt > 0 ? st / dt : 0; const [nx, nz] = collide(dog.x + ddx / dd * st, dog.z + ddz / dd * st); if (!dogKeepOut(nx, nz)) { dog.x = nx; dog.z = nz; } dog.yaw = Math.atan2(ddx, ddz); }
     // walk cycle: about one stride per 1.2 m; the legs ease in and out of walking
