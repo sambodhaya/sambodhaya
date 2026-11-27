@@ -3582,7 +3582,30 @@ function laneStep(dt) {
 const novice = { n: null, a: 2.1, dir: 1, speed: 0, pause: 0, phase: 0, broom: null, grips: null, col: { x: 0, z: 10, r: 0.55 } };
 const NOVICE_ARC = [1.75, 4.55]; // the side of the courtyard away from the entrance road (angles round the tree)
 colliders.push(novice.col);
+// dust from the broom: at each turn of a stroke a few soft puffs rise from the broom's head, drift the way it swept,
+// spread and fade (fewer with calm motion). A small pool of sprites.
+const dustTex = canvasTexture(64, 64, (cx, w, h) => { const g = cx.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, "rgba(255,255,255,1)"); g.addColorStop(0.45, "rgba(255,255,255,0.6)"); g.addColorStop(1, "rgba(255,255,255,0)"); cx.fillStyle = g; cx.fillRect(0, 0, w, h); });
+const dustPool = [];
+for (let i = 0; i < 28; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: dustTex, color: 0x9c7d55, transparent: true, opacity: 0, depthWrite: false })); sp.visible = false; sp.userData = { age: 9 }; scene.add(sp); dustPool.push(sp); }
+function sweepDust(at, sweepDir, count) {
+  if (settings.calmMotion) count = 1;
+  for (let k = 0; k < count; k++) {
+    const sp = dustPool.find((d) => d.userData.age > 1.6); if (!sp) return;
+    const u = sp.userData; u.age = 0; u.life = 1.1 + Math.random() * 0.5; u.s0 = 0.4 + Math.random() * 0.25;
+    u.v = new THREE.Vector3(sweepDir.x * (0.5 + Math.random() * 0.5) + (Math.random() - 0.5) * 0.3, 0.25 + Math.random() * 0.25, sweepDir.z * (0.5 + Math.random() * 0.5) + (Math.random() - 0.5) * 0.3);
+    sp.position.set(at.x + (Math.random() - 0.5) * 0.3, groundAt(at.x, at.z) + PAVING + 0.08, at.z + (Math.random() - 0.5) * 0.3); sp.visible = true;
+  }
+}
+function dustStep(dt) {
+  for (const sp of dustPool) {
+    const u = sp.userData; if (!sp.visible) continue;
+    u.age += dt; if (u.age >= u.life) { sp.visible = false; u.age = 9; continue; }
+    const t = u.age / u.life; sp.position.addScaledVector(u.v, dt); u.v.multiplyScalar(1 - dt * 1.5);
+    sp.scale.setScalar(u.s0 * (1 + 2.2 * t)); sp.material.opacity = 0.85 * Math.min(1, t * 6) * Math.pow(1 - t, 1.5); // (quickly in, slowly out)
+  }
+}
 function noviceStep(dt) {
+  dustStep(dt);
   const n = novice.n; if (!n) return;
   const away = night.on; n.holder.visible = !away; novice.broom.visible = !away; novice.col.r = away ? 0 : 0.55;
   if (away) return;
@@ -3608,7 +3631,8 @@ function noviceStep(dt) {
   const top = new THREE.Vector3(x, 1.85 * k, z).addScaledVector(fwd, 0.25 * k).addScaledVector(right, 0.25 * k);
   const dir = top.clone().sub(head).normalize();
   novice.broom.position.copy(head); novice.broom.quaternion.setFromUnitVectors(up, dir);
-  if (Math.floor(novice.phase / Math.PI) !== stroke) sound.sweep(head.x, 0.1, head.z);
+  if (!settings.calmMotion && Math.random() < dt * 5) sweepDust(head, right.clone().multiplyScalar(Math.cos(novice.phase)), 1); // a light trickle along the stroke
+  if (Math.floor(novice.phase / Math.PI) !== stroke) { sound.sweep(head.x, 0.1, head.z); sweepDust(head, right.clone().multiplyScalar(Math.cos(novice.phase)), 4); }
   const grips = [head.clone().addScaledVector(dir, 1.05 * k), head.clone().addScaledVector(dir, 1.5 * k)];
   for (const l of fallenLeaves) { const u = l.userData; if (u.fall > 0 || u.fade >= 0) continue; if (Math.hypot(u.x - head.x, u.z - head.z) < 0.75) { u.fade = 0; u.vx = fwd.x * 0.8 + right.x * Math.cos(novice.phase) * 1.2; u.vz = fwd.z * 0.8 + right.z * Math.cos(novice.phase) * 1.2; } }
   const B = n.B, shape = handShape(n.obj); if (!shape || !B.LeftArm) return;
