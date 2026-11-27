@@ -1,7 +1,7 @@
 {
   "backend": {
     "name": "github",
-    "repo": "Dhardesh-crypto/Sambodhaya",
+    "repo": "sambodhaya/sambodhaya",
     "branch": "main",
     "site_domain": "sambodhaya.netlify.app"
   },

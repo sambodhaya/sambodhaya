@@ -92,7 +92,7 @@ sign_fields = [
 ]
 
 config = {
-    "backend": {"name": "github", "repo": "Dhardesh-crypto/Sambodhaya", "branch": "main", "site_domain": "sambodhaya.netlify.app"},
+    "backend": {"name": "github", "repo": "sambodhaya/sambodhaya", "branch": "main", "site_domain": "sambodhaya.netlify.app"},
     "site_url": "https://sambodhaya.netlify.app",
     "display_url": "https://sambodhaya.netlify.app",
     "media_folder": "img/uploads",
