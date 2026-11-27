@@ -5804,12 +5804,30 @@ function poseLowerBody(model, B, c, kneel, bow, fold = 0) {
   model.updateMatrixWorld(true);
   [["Left", 1], ["Right", -1]].forEach(([s]) => {
     const H = B[s + "UpLeg"].getWorldPosition(new THREE.Vector3());
-    // the ankle stays where it lies when kneeling (behind the knee, the shin flat on the floor)
-    const ankle = new THREE.Vector3(c.root.x, c.floor + ANKLE_UP * c.scale, c.root.z).addScaledVector(c.fwd, c.span - c.shin).addScaledVector(c.side, H.clone().sub(c.root).dot(c.side));
-    const toe = ankle.clone().addScaledVector(c.fwd, -0.24 * c.scale).setY(c.floor + 0.04 * c.scale);
-    legTo(B, s, ankle, toe, c.fwd.clone().addScaledVector(c.up, -0.3), kneel);
+    // toes tucked under, as boys kneel: the heel is up, so the ankle rises behind the knee (the shin slopes up to it)
+    // and the foot stands almost upright on the ball of the foot, the toes bent forward flat on the floor
+    const dy = (ANKLE_TUCK - KNEE_UP) * c.scale, run = Math.sqrt(Math.max(0, c.shin * c.shin - dy * dy));
+    const ankle = new THREE.Vector3(c.root.x, c.floor + ANKLE_TUCK * c.scale, c.root.z).addScaledVector(c.fwd, c.span - run).addScaledVector(c.side, H.clone().sub(c.root).dot(c.side));
+    const ball = ankle.clone().addScaledVector(c.fwd, -BALL_BACK * c.scale).setY(c.floor + BALL_UP * c.scale);
+    legTo(B, s, ankle, ball, c.fwd.clone().addScaledVector(c.up, -0.3), kneel);
+    const tb = B[s + "ToeBase"];
+    if (tb) { // the toes: bent forward along the floor, toward the knees
+      const dir = new THREE.Vector3(0, 1, 0).applyQuaternion(tb.getWorldQuaternion(new THREE.Quaternion()));
+      const want = c.fwd.clone().addScaledVector(c.up, -0.05).normalize();
+      turnBone(tb, new THREE.Quaternion().slerp(new THREE.Quaternion().setFromUnitVectors(dir, want), kneel));
+    }
   });
+  // nothing below the floor, also on the way down and up (where the standing and kneeling poses are blended): if a
+  // foot's joints would sink, the whole body rises by that much
+  model.updateMatrixWorld(true);
+  let sink = 0;
+  ["Left", "Right"].forEach((s) => {
+    if (B[s + "ToeBase"]) sink = Math.max(sink, c.floor + BALL_UP * c.scale - B[s + "ToeBase"].getWorldPosition(new THREE.Vector3()).y);
+    if (B[s + "Foot"]) sink = Math.max(sink, c.floor + BALL_UP * c.scale - B[s + "Foot"].getWorldPosition(new THREE.Vector3()).y);
+  });
+  if (sink > 0.001) { B.Hips.position.copy(B.Hips.parent.worldToLocal(B.Hips.getWorldPosition(new THREE.Vector3()).addScaledVector(c.up, sink))); model.updateMatrixWorld(true); }
 }
+const ANKLE_TUCK = 0.14, BALL_BACK = 0.05, BALL_UP = 0.065; // toes tucked: ankle height; the ball of the foot behind and above the floor (its joint is inside the shoe)
 // how far the spine must bend, with the hips raised as in the bow, for the forehead to touch the floor
 // (found once he is fully kneeling, then kept)
 function kraapTouch(model, B, c) {
