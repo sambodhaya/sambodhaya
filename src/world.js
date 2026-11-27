@@ -1264,7 +1264,7 @@ function loadSeated(file, s, fallback) {
     obj.position.copy(fit.p); obj.scale.setScalar(fit.s);
     if (!B) { seatStatic(fallback, s.lean); return; }
     s.lean.add(holder); s.lids = addLids(obj, file);
-    monkFigures.push({ o: holder, ph: monkFigures.length * 2.1 }); // he breathes like the others
+    // (he breathes with his spine, in teacherBreathe, not by the slight swelling the unrigged figures use)
     s.rig = { holder, obj, B, k: 1.94, lap: J.lap };
   });
 }
@@ -4991,7 +4991,8 @@ function teacherSit(R, s) {
   [["Left", 1, 0], ["Right", -1, LAP_RISE]].forEach(([sd, sg, dy]) => {
     const hs = shape[sd], Q = basisQuat(hs.finger, hs.palm, left.clone().multiplyScalar(-sg), up); // fingers across, palm up
     const centroid = hs.points.reduce((acc, q) => acc.add(q), new THREE.Vector3()).multiplyScalar(1 / hs.points.length).applyQuaternion(Q).multiplyScalar(scale);
-    armTo(B, sd, lap.clone().sub(centroid).addScaledVector(up, dy + centroid.dot(up)), Q, left.clone().multiplyScalar(sg * 0.8).addScaledVector(up, -0.6), 1);
+    const o = s.settle && s.settle.off && s.settle.off.side === sd ? s.settle.off : null, fwdL = new THREE.Vector3().crossVectors(left, up); // (the monk's forward)
+    armTo(B, sd, lap.clone().sub(centroid).addScaledVector(up, dy + centroid.dot(up) + (o ? o.up * scale : 0)).addScaledVector(fwdL, o ? o.fwd * scale : 0), Q, left.clone().multiplyScalar(sg * 0.8).addScaledVector(up, -0.6), 1);
   });
 }
 // the wrist's turn about the forearm, half of it taken by the forearm (so the wrist doesn't wring)
@@ -5003,7 +5004,7 @@ function spreadTwist(B, sd) {
 }
 const BLESS_GRIP = [0.045, 0.03]; // where the whisk handle lies in his hand: along the fingers from the wrist, out from the palm
 // Now and then a teacher's head turns a little, and when the child is close before him he looks at the child.
-const GAZE_NEAR = 3.5, GAZE_MAX = 0.45; // how close the child must be; how far the head turns (radians)
+const GAZE_NEAR = 5, GAZE_MAX = 0.5; // how close the child must be; how far the head turns (radians)
 function teacherGaze(s, R, dt, fwd, left, up) {
   const G = s.gaze || (s.gaze = { yaw: 0, aim: 0, next: 2 + Math.random() * 6 });
   const at = R.B.Head.getWorldPosition(new THREE.Vector3()), dx = player.x - at.x, dz = player.z - at.z;
@@ -5011,7 +5012,25 @@ function teacherGaze(s, R, dt, fwd, left, up) {
   if (Math.hypot(dx, dz) < GAZE_NEAR && ahead > 0.3) G.aim = Math.max(-GAZE_MAX, Math.min(GAZE_MAX, Math.atan2(side, ahead)));
   else if ((G.next -= dt) < 0) { G.next = 5 + Math.random() * 8; G.aim = settings.calmMotion ? 0 : (Math.random() < 0.5 ? 0 : (Math.random() - 0.5) * 0.4); }
   G.yaw += (G.aim - G.yaw) * Math.min(1, dt * 1.2);
-  turnBone(R.B.neck, _q2.setFromAxisAngle(up, G.yaw * 0.4)); turnBone(R.B.Head, _q2.setFromAxisAngle(up, G.yaw * 0.6));
+  if (R.B.Spine) turnBone(R.B.Spine, _q2.setFromAxisAngle(up, G.yaw * 0.12)); // the shoulders follow a little
+  turnBone(R.B.neck, _q2.setFromAxisAngle(up, G.yaw * 0.35)); turnBone(R.B.Head, _q2.setFromAxisAngle(up, G.yaw * 0.53));
+}
+// breathing: the chest rises and the back straightens a little with each slow breath (about 4.5 s); the hands stay in the
+// lap because teacherSit places them after this. Calm motion keeps it, smaller.
+function teacherBreathe(s, R, left) {
+  const b = Math.sin(monkTime * 1.4 + (s.lx || 0)) * (settings.calmMotion ? 0.5 : 1);
+  if (R.B.Spine01) turnBone(R.B.Spine01, _q2.setFromAxisAngle(left, -0.018 * b));
+  if (R.B.Spine) turnBone(R.B.Spine, _q2.setFromAxisAngle(left, -0.014 * b));
+  if (R.B.neck) turnBone(R.B.neck, _q2.setFromAxisAngle(left, 0.02 * b)); // the head stays level
+}
+// now and then (every 20-45 s, not with calm motion) one hand lifts a little in the lap and settles again, as a
+// sitting person adjusts; s.settle.off is read by teacherSit
+function teacherSettle(s, dt) {
+  const S = s.settle || (s.settle = { next: 8 + Math.random() * 20, t: -1, side: "Right", off: null });
+  if (S.t < 0) { if (!settings.calmMotion && (S.next -= dt) < 0) { S.t = 0; S.side = Math.random() < 0.5 ? "Left" : "Right"; } S.off = null; return; }
+  S.t += dt; const u = Math.min(1, S.t / 2.6), e = Math.sin(Math.PI * u) ** 2;
+  S.off = { side: S.side, up: 0.045 * e, fwd: 0.03 * e };
+  if (u >= 1) { S.t = -1; S.next = 20 + Math.random() * 25; S.off = null; }
 }
 // every frame, each rigged teacher: at rest as the others sit, looking about; the senior monk also receives the
 // Kathina robe and blesses with holy water
@@ -5026,7 +5045,7 @@ function teacherStep(h, s, dt) {
   const shape = handShape(R.obj), RB = R.B; if (!shape || !RB.RightArm) return;
   const g = h.g, toW = (v) => g.localToWorld(v.clone()), dirW = (v) => v.clone().transformDirection(g.matrixWorld);
   const fwd = dirW(new THREE.Vector3(0, 0, 1)), left = dirW(new THREE.Vector3(1, 0, 0)), up = new THREE.Vector3(0, 1, 0);
-  waiBegin(RB); teacherSit(R, s); teacherGaze(s, R, dt, fwd, left, up); teacherEat(s, R, shape, fwd, left, up, dt);
+  waiBegin(RB); teacherBreathe(s, R, left); teacherSettle(s, dt); teacherSit(R, s); teacherGaze(s, R, dt, fwd, left, up); teacherEat(s, R, shape, fwd, left, up, dt);
   if (s.talking > 0) { s.talking -= dt; s.talkT = (s.talkT || 0) + dt; turnBone(RB.Head, _q2.setFromAxisAngle(left, -0.1 + 0.035 * Math.sin(s.talkT * 4.2) * Math.sin(s.talkT * 1.3))); } // looking up at the child as he speaks
   // receiving the robe: both hands reach out and rest on the tray's rim a moment
   const rt = rk ? kraap.t : -1, recv = rk ? smooth(rel - 0.6, rel, rt) * (1 - smooth(rel + 1.4, rel + 2.1, rt)) : 0;
