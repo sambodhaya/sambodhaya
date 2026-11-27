@@ -3651,9 +3651,13 @@ function dustStep(dt) {
     sp.scale.setScalar(u.s0 * (1 + 2.2 * t)); sp.material.opacity = 0.85 * Math.min(1, t * 6) * Math.pow(1 - t, 1.5); // (quickly in, slowly out)
   }
 }
-// closing a hand with finger bones round his broom handle (about 7 cm thick at his size; tried on his fingers): each finger's
+// closing a hand with finger bones round his broom handle (6 cm thick; tried on his fingers with his wrist straight, and
+// measured on his skin: palm and thumb clear of it, the fingertips on it): each finger's
 // joints bend toward the palm about their local +x, the thumb closes over; w blends from the open hand
-const GRIP = { f: [1.2, 1.35, 0.85], t: [0.3, 0.22, 0.18] }; // radians: base, middle, last joint; thumb root, knuckle, tip
+const GRIP = { f: [1.44, 1.62, 1.02], t: [0.3, 0.22, 0.18] }; // radians: base, middle, last joint; thumb root, knuckle, tip
+// the handle lies this much further into the curl of the fingers than the middle finger's first-to-third joint midpoint,
+// clear of the palm and the thumb (nearer, the thumb's root sinks into it and its tip pokes out the other side)
+const GRIP_HOLLOW = 0.05;
 function gripFingers(B, side, w) {
   for (const f of ["Index", "Middle", "Ring", "Pinky", "Thumb"]) for (let j = 1; j <= 3; j++) {
     const b = B[side + "Hand" + f + j]; if (!b) continue;
@@ -3723,9 +3727,26 @@ function noviceStep(dt) {
   [["Right", grips[0], right.clone().multiplyScalar(0.6).addScaledVector(fwd, -0.8), new THREE.Vector3().addScaledVector(up, -1).addScaledVector(right, 0.8)],
    ["Left", grips[1], fwd.clone().multiplyScalar(-0.85).addScaledVector(up, 0.35).addScaledVector(side, 0.2), new THREE.Vector3().addScaledVector(up, -1).addScaledVector(side, 0.7)]].forEach(([s, p, from, pole]) => {
     const hs = shape[s]; if (!hs) return;
-    const outN = from.clone().addScaledVector(dir, -from.dot(dir)).normalize();      // from the handle out to the back of the hand
-    const fingers = new THREE.Vector3().crossVectors(outN, dir).multiplyScalar(s === "Right" ? -1 : 1).normalize(); // round the handle (the hands are mirror images)
-    const Q = basisQuat(hs.finger, hs.palm, fingers, outN.clone().negate());          // palm toward the handle
+    // the hand round the handle: the palm toward it, the fingers round it (the hands are mirror images), the back of
+    // the hand out along oN; the knuckles run along the handle, the thumb toward either end of it (sign)
+    const grip = (oN, sign) => {
+      const fg = new THREE.Vector3().crossVectors(oN, dir).multiplyScalar((s === "Right" ? -1 : 1) * sign).normalize();
+      return { outN: oN, Q: basisQuat(hs.finger, hs.palm, fg, oN.clone().negate()) };
+    };
+    const out0 = from.clone().addScaledVector(dir, -from.dot(dir)).normalize();      // a first guess at the back of the hand
+    let { outN, Q } = grip(out0, 1);
+    // where round the handle the hand goes: wherever its wrist is nearest straight (the hand as it rests on the forearm),
+    // so the wrist is neither bent back nor wrung (the forearm's own turn comes from his animation)
+    const restQ = (restPose(n.obj) || {})[s + "Hand"];
+    if (restQ) {
+      armTo(B, s, p, Q, pole, 1);
+      const foreInv = B[s + "ForeArm"].getWorldQuaternion(new THREE.Quaternion()).invert();
+      let best = Infinity;
+      for (const sign of [1, -1]) for (let i = 0; i < 24; i++) {
+        const c = grip(out0.clone().applyAxisAngle(dir, i * Math.PI / 12), sign), dev = foreInv.clone().multiply(c.Q).angleTo(restQ);
+        if (dev < best) { best = dev; outN = c.outN; Q = c.Q; }
+      }
+    }
     const centroid = hs.points.reduce((acc, q) => acc.add(q), new THREE.Vector3()).multiplyScalar(1 / hs.points.length).applyQuaternion(Q).multiplyScalar(sc);
     // placed, closed, then moved by however far the hollow of the fist ended up from the handle (twice: exact)
     let target = p.clone().addScaledVector(outN, gr).sub(centroid);
@@ -3733,7 +3754,7 @@ function noviceStep(dt) {
       armTo(B, s, target, Q, pole, 1); gripFingers(B, s, 1);
       if (!B[s + "HandMiddle1"] || !B[s + "HandMiddle3"]) break;
       const hollow = B[s + "HandMiddle1"].getWorldPosition(new THREE.Vector3()).add(B[s + "HandMiddle3"].getWorldPosition(new THREE.Vector3())).multiplyScalar(0.5);
-      const err = p.clone().sub(hollow);
+      const err = p.clone().addScaledVector(outN, GRIP_HOLLOW).sub(hollow);
       if (err.length() < 0.004) break; target.add(err);
     }
   });
@@ -4040,7 +4061,7 @@ setTimeout(() => {
     if (!n) return; novice.n = n;
     novice.broom = broom.obj.clone(); scene.add(novice.broom);
     // his own broom has a longer handle (he is taller than the boy, and holds it higher up): from the tie to NOVICE_TOP
-    const h = novice.broom.children[0]; h.geometry = new THREE.CylinderGeometry(0.034, 0.038, NOVICE_TOP - 0.25, 10); h.position.y = (0.25 + NOVICE_TOP) / 2;
+    const h = novice.broom.children[0]; h.geometry = new THREE.CylinderGeometry(0.028, 0.03, NOVICE_TOP - 0.25, 10); h.position.y = (0.25 + NOVICE_TOP) / 2;
   });
 }, 1500);
 
