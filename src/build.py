@@ -96,7 +96,7 @@ shell = (src / "shell.html").read_text(encoding="utf-8")
 print(f"wrote content/site.json and index.html ({len(lessons)} lessons)")
 
 # what the site serves, and nothing else
-PUBLIC = ["index.html", "world.html", "records.html", "admin", "content", "src/world.js", "src/sound.js", "img", "assets", "audio"]
+PUBLIC = ["index.html", "world.html", "records.html", "admin", "content", "src/world.js", "src/sound.js", "src/bamboo.js", "img", "assets", "audio"]
 dist = root / "dist"
 shutil.rmtree(dist, ignore_errors=True)
 for name in PUBLIC:

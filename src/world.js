@@ -13,6 +13,7 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { Reflector } from "three/addons/objects/Reflector.js";
 import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
 import { createSound } from "./sound.js";
+import { bambooClump } from "./bamboo.js";
 
 /* ---------------- settings shared with the 2D site ---------------- */
 const read = (k, d) => { try { const v = localStorage.getItem("sambodhaya-" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
@@ -305,6 +306,34 @@ function props(name, h, list, { fallback, shadow = HIGH || h >= 2, parent = scen
     });
   });
   propJobs.push(job); return job;
+}
+
+// Bamboo clumps built in code (src/bamboo.js, from the author's jungle game "Stripped"): three clumps and their far
+// versions, placed like props: [x, z, rotY]. Each clump is h tall; copies are one instanced mesh per patch and
+// variant, and patches beyond LOD_FAR show the far version.
+let bambooKinds = null;
+function bamboo(h, list, { extra = false } = {}) {
+  if (extra && !HIGH) return;
+  bambooKinds ??= [0, 1, 2].map((v) => ({ near: bambooClump(301 + v, false, waterTime), far: bambooClump(301 + v, true, waterTime) }));
+  const cells = new Map();
+  list.forEach((p, i) => { const k = Math.floor(p[0] / PROP_CELL) + "," + Math.floor(p[1] / PROP_CELL); if (!cells.has(k)) cells.set(k, []); cells.get(k).push([...p, i % 3]); });
+  const at = new THREE.Object3D();
+  const instanced = (part, group, s) => {
+    const im = new THREE.InstancedMesh(part.geo, part.mat, group.length);
+    group.forEach(([x, z, r = 0], i) => { at.position.set(x, 0, z); at.rotation.set(0, r, 0); at.scale.setScalar(s * (0.9 + 0.2 * ((i * 0.618) % 1))); at.updateMatrix(); im.setMatrixAt(i, at.matrix); });
+    im.castShadow = im.receiveShadow = true; im.computeBoundingSphere(); scene.add(im); return im;
+  };
+  cells.forEach((group) => {
+    const near = [], far = [];
+    bambooKinds.forEach((kind, v) => {
+      const mine = group.filter((p) => p[3] === v); if (!mine.length) return;
+      const s = h / kind.near.height;
+      kind.near.parts.forEach((part) => near.push(instanced(part, mine, s)));
+      kind.far.parts.forEach((part) => { const im = instanced(part, mine, s); im.visible = false; far.push(im); });
+    });
+    const cx = group.reduce((a, p) => a + p[0], 0) / group.length, cz = group.reduce((a, p) => a + p[1], 0) / group.length;
+    lodCells.push({ x: cx, z: cz, r: Math.max(...group.map((p) => Math.hypot(p[0] - cx, p[1] - cz))) + h, near, far, isFar: false });
+  });
 }
 
 /* ---------------- sky & far mountains ---------------- */
@@ -1726,7 +1755,7 @@ function cliffFace({ w, h, z, notch = 2.7, lipY }) {
     }
     m.castShadow = m.receiveShadow = true; scene.add(m);
   }
-  props("bamboo", 7, [[-13, -50, 0], [-15, -55, 1], [13, -50, 2], [15, -55, 3], [-11, -57, 4], [11, -57, 5]]);
+  bamboo(7, [[-13, -50, 0], [-15, -55, 1], [13, -50, 2], [15, -55, 3], [-11, -57, 4], [11, -57, 5]]);
   add(new THREE.CylinderGeometry(5, 5, 0.4, 24), MAT.water, 0, 0.2, -55.5, scene, false);
   waterfall(0, -58.35, 9, 0.42, 4.6);
   colliders.push({ x: 0, z: -56, r: 5 });
@@ -2803,7 +2832,7 @@ const gardenSpots = []; // (for ?debug checks)
       if (!lawn(x, z, 1.6) || groves.some(([gx, gz]) => Math.hypot(gx - x, gz - z) < 9) || edgeTrees.some(([ex, ez]) => Math.hypot(ex - x, ez - z) < 5)) continue;
       groves.push([x, z, rnd() * 6.28]); colliders.push({ x, z, r: 1.1 });
     }
-    props("bamboo", 7.5, groves, { extra: true });
+    bamboo(7.5, groves, { extra: true });
   }
   // ---- rain trees and sugar palms on the land beyond the moat (only their far versions are ever near enough to load)
   const beyond = [];
