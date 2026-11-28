@@ -1,0 +1,22 @@
+{
+  "comment": "Fingerprints (sha256, UTF-8, trimmed) of the text each 🎧 recording speaks: the lesson's `simple` text (its short story) in Thai and English. The build warns when a lesson's text no longer matches its recording. After re-recording, run: python3 src/build.py --accept-audio u01-en (the recordings remade; with no names, all of them).",
+  "field": "simple",
+  "recordings": {
+    "u01-en": "4331ea416976e7b7b6c559a79cceee4205ce4940e4e8b0c20c56816dc7d9afeb",
+    "u01-th": "d3caa51f707282b9cd6f835f28532f0813dabdf2ba14977e75e117c7cca0d0f9",
+    "u02-en": "97964b3429b94ff08e936505f616c69c2cb4aa9219a9ad16be207c92d7112628",
+    "u02-th": "279575e1e06f77b8208b7cb77507c5b0ee17cb69e08996312413fd6639ee0658",
+    "u03-en": "708f2c435a5477ca0db5ebdefba2ffe8884a9c4c953d4a3682a44dbf4c3c49ab",
+    "u03-th": "de7fe3395c3788f5f1a37595fedad45307caf24a207ba4262457edcc7b88b534",
+    "u04-en": "12278a2d5cb2f18872e2d4a1d7729cbd95fc8bdf33ed1bf8faf20ecea9be3127",
+    "u04-th": "f769ef7df7af3f930cf2f5bd91adb881f4cb1f3bfa5ab8fe81f673faba2a2693",
+    "u05-en": "1c21279d96f1cb3db3582a72d03813a2a382d7b72302e24bf53c564a86509eae",
+    "u05-th": "858ec2b0e247e745fbf60b68dc597e42eac5dc1233cd311c5ff1e75e54dac70f",
+    "u06-en": "ed1eca96960c9be002ed1b040968d47cfaddba0cfe3f5e7c0b36976dcb932219",
+    "u06-th": "d5a55c37796007629fdcd388a86c9e52dc49c64eb5a014538e51923f52fd08ee",
+    "u07-en": "d98db5fbd9d34cb9a39740b877fa04ca9ce991669c6da4c4e38216129acc58da",
+    "u07-th": "3c729ced3be719c57e34abaf31a142ed1e8c2331983667d007ebbe670cbd21e4",
+    "u08-en": "f9b3b00fedc70878f8b5dbd06d7bde8c77e66c9e03b1f27b91cc5c39d572fddd",
+    "u08-th": "cf7abab15060492f79e4dd50e0d9b52ac9d41046343e99fb2ffeb4e8709d4ed7"
+  }
+}

@@ -41,7 +41,7 @@ function fields(form, d, sub) {
     page: d.page,
     language: d.lang,
     device: d.device,
-    email: d.email,
+    // no email: the feedback form is open to children, so an email sent anyway (an old page, a hand-made post) is dropped here
     attachment: fileUrl(d.attachment),
     submission_id: sub.id,
   };

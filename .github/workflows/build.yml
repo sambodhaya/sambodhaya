@@ -1,0 +1,26 @@
+# Runs the same build as Netlify on every push and pull request, and fails when
+#  - a content file is broken (src/build.py stops),
+#  - the committed index.html or content/site.json is not what the build makes from the content
+#    (run python3 src/build.py and commit both), or
+#  - admin/config.yml or .pages.yml is not what src/admin_config.py makes (run it and commit both).
+name: build
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build (checks the content)
+        run: python3 src/build.py
+      - name: Committed build output is up to date
+        run: git diff --exit-code index.html content/site.json
+      - name: Admin forms are up to date
+        run: |
+          python3 src/admin_config.py
+          git diff --exit-code admin/config.yml .pages.yml

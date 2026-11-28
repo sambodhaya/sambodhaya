@@ -20,11 +20,13 @@
 [hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: #f3d9a6; color: var(--ink); font-family: var(--body); }
 #view { position: fixed; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; outline: none; }
+#view:focus-visible { outline: 3px solid #c9772a; outline-offset: -3px; } /* (by keyboard: where the keys go) */
 button { font: inherit; color: inherit; cursor: pointer; }
 :focus-visible { outline: 3px solid var(--saffron-deep); outline-offset: 2px; }
 .panel { background: rgba(255, 253, 248, .96); border: 2px solid var(--ink); border-radius: 18px; box-shadow: 3px 3px 0 rgba(58, 42, 29, .5); }
-.btn { background: var(--saffron); color: var(--cream); border: 2px solid var(--ink); border-radius: 12px; padding: 6px 16px; font-family: var(--display); font-size: 1.05rem; box-shadow: 2px 2px 0 rgba(58, 42, 29, .55); text-decoration: none; display: inline-block; }
+.btn { background: var(--saffron-deep); color: var(--cream); border: 2px solid var(--ink); border-radius: 12px; padding: 6px 16px; font-family: var(--display); font-size: 1.05rem; box-shadow: 2px 2px 0 rgba(58, 42, 29, .55); text-decoration: none; display: inline-block; }
 .chip { background: var(--cream); border: 1.5px solid var(--ink); border-radius: 999px; padding: 4px 12px; font-size: .92rem; }
+.btn:hover { background: #8a4609; } a.chip { color: var(--ink); text-decoration: none; } /* (cream on deep saffron, 5.3:1 — and 7:1 on hover) */
 .chip.on { background: var(--gold); }
 .quiet { color: var(--muted); font-size: .85rem; margin: 0; }
 
@@ -35,6 +37,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .hud-tools { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .hud-tools.folded > :not(.pin) { display: none; } /* the menu (☰) holds the rest, out of the way of the temple */
 #btn-menu[aria-expanded="true"] { background: var(--gold); }
+/* the things the child does (wai, sit, bow, pet) set apart from the ones that open or change things, so a reach for
+   🗺️ doesn't land on 🙏 */
+.hud-tools .chip.act { background: #fff1de; border-color: #c9772a; } #btn-wai { margin-left: 14px; }
 .proto { position: fixed; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); font-size: .75rem; padding: 3px 12px; background: #fff6dc; border: 1.5px dashed #d9b75a; border-radius: 999px; z-index: 4; white-space: nowrap; max-width: calc(100% - 20px); overflow: hidden; text-overflow: ellipsis; }
 
 /* proximity prompt */
@@ -62,6 +67,13 @@ body.two .prompt { max-width: calc(50% - 16px); }
 .toast { position: fixed; left: 50%; top: calc(62px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); width: min(460px, calc(100% - 24px)); padding: 10px 14px; z-index: 6; line-height: 1.5; font-size: .95rem; pointer-events: none; }
 @media (max-width: 760px) { .questbox { top: auto; bottom: calc(40px + env(safe-area-inset-bottom, 0px)); } .toast { top: calc(var(--prompt-top, 124px) + 46px); } }
 @media (pointer: coarse) { .questbox { left: calc(12px + env(safe-area-inset-left, 0px)); top: auto; bottom: calc(176px + env(safe-area-inset-bottom, 0px)); width: min(236px, calc(100% - 136px)); padding: 6px 10px; font-size: .8rem; } .questbox > button { font-size: .9rem; } .questbox li:not(.next) { display: none; } } /* above the joystick, clear of the round buttons; on phones only the step to do now (📜 Quests has the rest) */
+/* short screens (a phone on its side): the quest box is a small chip at the top left showing only the step to do
+   now (📜 Quests has the rest), and the prototype note stays out of the way */
+@media (max-height: 480px) {
+  .questbox, body.two .questbox { top: calc(52px + env(safe-area-inset-top, 0px)); bottom: auto; left: calc(10px + env(safe-area-inset-left, 0px)); width: min(240px, 34vw); padding: 5px 9px; font-size: .78rem; }
+  .questbox > button { font-size: .85rem; } .questbox ol { margin-top: 3px; } .questbox li:not(.next) { display: none; }
+  .proto { font-size: .68rem; padding: 2px 10px; max-width: 46vw; } /* (centred along the bottom, between the stick and the round buttons) */
+}
 
 /* the meditation corner: the choice while sitting, and a warm glow at the edges while it lasts */
 .medi { position: fixed; left: 50%; bottom: calc(40px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 6px 10px 6px 14px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; align-items: center; z-index: 5; width: max-content; max-width: calc(100% - 24px); box-sizing: border-box; }
@@ -103,6 +115,9 @@ body.photo .hud-top, body.photo .prompt, body.photo .questbox, body.photo .toast
 @media (pointer: coarse) { .photobar { bottom: auto; top: calc(12px + env(safe-area-inset-top, 0px)); } }
 #photo-flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 8; transition: opacity .5s ease; }
 #photo-flash.on { opacity: .85; transition: none; }
+/* less motion (the device's setting, or 🍃 calm motion): the page's fades and slides happen at once */
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
+body.calm *, body.calm *::before, body.calm *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 .dialog .photo-img { width: 100%; height: auto; border-radius: 10px; border: 3px solid var(--gold); display: block; }
 .dialog .mural { width: 100%; height: auto; aspect-ratio: 4 / 3; border-radius: 10px; border: 3px solid var(--gold); display: block; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -130,6 +145,11 @@ body.photo .hud-top, body.photo .prompt, body.photo .questbox, body.photo .toast
 
 /* loading */
 .loading { position: fixed; inset: 0; display: grid; place-items: center; background: var(--paper); z-index: 20; font-family: var(--display); font-size: 1.4rem; text-align: center; padding: 20px; }
+/* when the temple can't open (or its picture is lost): a calm note with a way on */
+.trouble { max-width: 30rem; font-family: var(--body, inherit); font-size: 1rem; line-height: 1.5; }
+.trouble h2 { font-family: var(--display); font-size: 1.35rem; margin: 0 0 .4em; }
+.trouble p { margin: .3em 0; } .trouble .en { color: #6b5a44; font-size: .95rem; }
+.trouble .row { justify-content: center; margin-top: 1em; }
 
 /* touch controls */
 .touch { display: none; }
@@ -161,12 +181,14 @@ body.photo .hud-top, body.photo .prompt, body.photo .questbox, body.photo .toast
   body.two #prompt { left: 25%; } body.two #prompt2 { left: 75%; }
 }
 @media (max-width: 600px) { .places { grid-template-columns: minmax(0, 1fr); } .hud-tools .label { display: none; } }
+/* a phone on its side: the round buttons smaller, so their column stays clear of the menu at the top */
+@media (pointer: coarse) and (max-height: 480px) { .tbtns { gap: 6px; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); } .tbtns button { width: 50px; height: 50px; } }
 </style>
 <script type="importmap">
 { "imports": {
-  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
-  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/",
-  "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.1.0/lib/three-vrm.module.min.js"
+  "three": "./vendor/three@0.169.0/build/three.module.js",
+  "three/addons/": "./vendor/three@0.169.0/examples/jsm/",
+  "@pixiv/three-vrm": "./vendor/three-vrm@3.1.0/lib/three-vrm.module.min.js"
 } }
 </script>
 </head>
@@ -184,10 +206,10 @@ body.photo .hud-top, body.photo .prompt, body.photo .questbox, body.photo .toast
     <button class="chip" id="btn-photo">📷 <span class="label" data-th="ถ่ายภาพ" data-en="Photo">ถ่ายภาพ</span></button>
     <button class="chip" id="btn-avatar">🧍 <span class="label" data-th="ตัวละครของฉัน" data-en="My avatar">ตัวละครของฉัน</span></button>
     <button class="chip" id="btn-quality">✨ <span class="label">ภาพ: ละเอียด</span></button>
-    <button class="chip" id="btn-wai">🙏 <span class="label" data-th="ไหว้" data-en="Wai">ไหว้</span></button>
-    <button class="chip" id="btn-sit">🧘 <span class="label" data-th="นั่ง" data-en="Sit">นั่ง</span></button>
-    <button class="chip" id="btn-kraap">🙇 <span class="label" data-th="กราบพระ" data-en="Tribute">กราบพระ</span></button>
-    <button class="chip" id="btn-pet">🐾 <span class="label" data-th="ลูบหัวหมา" data-en="Pet the dog">ลูบหัวหมา</span></button>
+    <button class="chip act" id="btn-wai">🙏 <span class="label" data-th="ไหว้" data-en="Wai">ไหว้</span></button>
+    <button class="chip act" id="btn-sit">🧘 <span class="label" data-th="นั่ง" data-en="Sit">นั่ง</span></button>
+    <button class="chip act" id="btn-kraap">🙇 <span class="label" data-th="กราบพระ" data-en="Tribute">กราบพระ</span></button>
+    <button class="chip act" id="btn-pet">🐾 <span class="label" data-th="ลูบหัวหมา" data-en="Pet the dog">ลูบหัวหมา</span></button>
     <button class="chip" id="btn-sound" aria-pressed="false">🔈 <span class="label" data-th="เสียง" data-en="Sound">เสียง</span></button>
     <button class="chip" id="btn-night" aria-pressed="false">🌙 <span class="label" data-th="กลางคืน" data-en="Night">กลางคืน</span></button>
     <button class="chip" id="btn-calm" aria-pressed="false">🍃 <span class="label" data-th="ลดการเคลื่อนไหว" data-en="Calm motion">ลดการเคลื่อนไหว</span></button>
@@ -229,15 +251,41 @@ body.photo .hud-top, body.photo .prompt, body.photo .questbox, body.photo .toast
 
 <div class="touch two-touch" aria-hidden="true">
   <div class="stick" id="stick2"><div class="knob" id="knob2"></div></div>
-  <div class="pbtns p1"><button data-kid="1" data-do="act">E</button><button data-kid="1" data-do="wai">🙏</button><button data-kid="1" data-do="sit">🧘</button><button data-kid="1" data-do="jump">⤴︎</button></div>
-  <div class="pbtns p2"><button data-kid="2" data-do="act">E</button><button data-kid="2" data-do="wai">🙏</button><button data-kid="2" data-do="sit">🧘</button><button data-kid="2" data-do="jump">⤴︎</button></div>
+  <div class="pbtns p1"><button data-kid="1" data-do="act" aria-label="เด็กคนที่ 1: ทำ / เข้า · Child 1: act / enter">E</button><button data-kid="1" data-do="wai" aria-label="เด็กคนที่ 1: ไหว้ · Child 1: wai">🙏</button><button data-kid="1" data-do="sit" aria-label="เด็กคนที่ 1: นั่ง · Child 1: sit">🧘</button><button data-kid="1" data-do="jump" aria-label="เด็กคนที่ 1: กระโดด · Child 1: jump">⤴︎</button></div>
+  <div class="pbtns p2"><button data-kid="2" data-do="act" aria-label="เด็กคนที่ 2: ทำ / เข้า · Child 2: act / enter">E</button><button data-kid="2" data-do="wai" aria-label="เด็กคนที่ 2: ไหว้ · Child 2: wai">🙏</button><button data-kid="2" data-do="sit" aria-label="เด็กคนที่ 2: นั่ง · Child 2: sit">🧘</button><button data-kid="2" data-do="jump" aria-label="เด็กคนที่ 2: กระโดด · Child 2: jump">⤴︎</button></div>
 </div>
 <div class="touch" aria-hidden="true">
   <div class="stick" id="stick"><div class="knob" id="knob"></div></div>
   <div class="tbtns"><button id="t-sit" aria-label="นั่ง">🧘</button><button id="t-wai" aria-label="ไหว้">🙏</button><button id="t-pet" aria-label="ลูบหัวหมา">🐾</button><button id="t-jump">⤴︎</button><button id="t-act">E</button></div>
 </div>
 
-<p class="proto" role="note">🕯️ ต้นแบบ · เล่นคนเดียว ไม่มีอะไรถูกส่งออกจากเครื่องนี้ · ยังไม่ได้ทดสอบกับเด็กจริง</p>
-<script type="module" src="src/world.js"></script>
+<p class="proto" role="note" data-th="🕯️ ต้นแบบ · ไม่เก็บชื่อหรือข้อมูลส่วนตัว นับเฉพาะจำนวนการเข้าชมแบบไม่ระบุตัวตน · ยังไม่ได้ทดสอบกับเด็กจริง" data-en="🕯️ Prototype · no names or personal details are kept; visits are only counted, anonymously · not yet tested with children">🕯️ ต้นแบบ · ไม่เก็บชื่อหรือข้อมูลส่วนตัว นับเฉพาะจำนวนการเข้าชมแบบไม่ระบุตัวตน · ยังไม่ได้ทดสอบกับเด็กจริง</p>
+<script>
+// If the 3D temple can't open (its content or its 3D engine didn't load, or something broke while starting), the
+// loading screen says so and offers a way on instead of waiting for ever; and if the device takes the temple's
+// picture away (a phone short of memory drops the WebGL context), the same kind of note offers to open it again.
+(() => {
+  const note = (th, en, btnTh, btnEn, act) => {
+    const el = document.getElementById("loading"); el.hidden = false; el.setAttribute("role", "alert");
+    el.innerHTML = '<div class="trouble"><h2 lang="th">' + th[0] + '</h2><p lang="th">' + th[1] + '</p><p class="en" lang="en"><b>' + en[0] + '</b> ' + en[1] + '</p>' +
+      '<div class="row"><button class="btn" id="trouble-go">' + btnTh + ' · ' + btnEn + '</button><a class="chip" href="index.html">หน้าวัด · The temple pages</a></div></div>';
+    document.getElementById("trouble-go").addEventListener("click", act); document.getElementById("trouble-go").focus();
+  };
+  let started = false;
+  window.templeStarted = () => { started = true; };
+  window.templeFail = (why) => {
+    if (started) return; started = true; // (once; and not after the temple has opened)
+    if (why) console.error("Sambodhaya: the 3D temple couldn't open:", why);
+    note(["เปิดวัดไม่ได้", "อาจเป็นเพราะอินเทอร์เน็ต ลองใหม่อีกครั้ง หรือไปที่หน้าวัดแบบปกติ"], ["The temple couldn't open.", "It may be the connection. Try again, or go to the temple pages."],
+      "ลองอีกครั้ง", "Try again", () => location.reload());
+  };
+  window.templeLost = (reopen) => note(["ภาพวัดหายไป", "เครื่องต้องใช้หน่วยความจำ กดเพื่อเปิดวัดอีกครั้ง ตรงจุดเดิม"], ["The temple's picture was lost.", "The device needed its memory. Tap to open the temple again, where you were."],
+    "เปิดวัดอีกครั้ง", "Open it again", reopen);
+  addEventListener("error", (e) => { if (!started) templeFail(e.error || e.message); });
+  addEventListener("unhandledrejection", (e) => { if (!started) templeFail(e.reason); });
+  setTimeout(() => { if (!started) templeFail("still loading after 60 s"); }, 60000); // (a slow phone on a slow line takes a while: only after a long wait)
+})();
+</script>
+<script type="module" src="src/world.js" onerror="templeFail('the 3D module could not load')"></script>
 </body>
 </html>

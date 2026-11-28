@@ -19,14 +19,17 @@ import { bambooClump } from "./bamboo.js";
 const read = (k, d) => { try { const v = localStorage.getItem("sambodhaya-" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
 const write = (k, v) => { try { localStorage.setItem("sambodhaya-" + k, JSON.stringify(v)); return true; } catch (e) { return false; } };
 const settings = { lang: "th", calmMotion: false, mute: false, guide: true, ...read("settings", {}) };
-if (matchMedia("(prefers-reduced-motion: reduce)").matches) settings.calmMotion = true;
+// the device asking for less motion turns calm motion on, unless the visitor has chosen for themselves (🍃 in the menu)
+if (read("settings", {}).calmMotion === undefined && matchMedia("(prefers-reduced-motion: reduce)").matches) settings.calmMotion = true;
 // world.html?lang=en (or ?lang=th) chooses the language, and keeps it (the 2D pages read the same setting)
 { const q = (location.search.match(/[?&]lang=(th|en)\b/) || [])[1]; if (q) { settings.lang = q; write("settings", { ...read("settings", {}), lang: q }); } }
 const L = settings.lang === "en" ? "en" : "th";
 const tx = (th, en) => (L === "en" ? en : th);
 // What the temple says (hall names, signs, boards, info cards, the stories) lives in content/, edited through /admin;
 // src/build.py joins it into content/site.json. Here only the code: where things stand and how they behave.
-const CONTENT = await fetch("content/site.json", { cache: "no-cache" }).then((r) => r.json());
+const CONTENT = await fetch("content/site.json", { cache: "no-cache" })
+  .then((r) => { if (!r.ok) throw new Error(`content/site.json: ${r.status}`); return r.json(); })
+  .catch((e) => { if (window.templeFail) window.templeFail(e); throw e; }); // (world.html then says the temple couldn't open, with a way on)
 const txo = (o) => tx(o.th, o.en); // a {th, en} text in the visitor's language
 document.documentElement.lang = L;
 document.querySelectorAll("[data-th]").forEach((el) => { el.textContent = el.dataset[L]; });
@@ -61,7 +64,9 @@ function infoSpot(id, x, y, z, r, near = 0, when = null) { INFO.push({ id, x, y,
 // (phones: a touch screen under 600 px on its short side; tablets and others with little memory too)
 const touch = matchMedia("(pointer: coarse)").matches, phone = touch && Math.min(screen.width, screen.height) < 600;
 const weak = phone || (touch && (navigator.deviceMemory || 4) <= 4);
-let quality = read("world-quality", weak ? "light" : "high");
+// (a device whose first minute in detailed graphics was slow opens in light graphics next time: see the frame probe
+// below; the ✨ button's choice always wins. Safari doesn't tell the page its memory, so this is how it is found out)
+let quality = read("world-quality", read("world-quality-auto", weak ? "light" : "high"));
 const HIGH = quality === "high";
 
 // Anonymous visit counts (netlify/functions/track.mjs): which steps a visit reaches and how long it stays, never who
@@ -87,6 +92,10 @@ track("w_start");
 
 const canvas = document.getElementById("view");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !HIGH, powerPreference: "high-performance" });
+// A phone short of memory can take the temple's picture away (the WebGL context is lost) when the child switches
+// apps and comes back: then a note offers to open the temple again, where the child was (world.html's templeLost).
+canvas.addEventListener("webglcontextlost", (e) => { e.preventDefault(); if (window.templeLost) window.templeLost(() => reloadHere()); });
+canvas.addEventListener("webglcontextrestored", () => reloadHere());
 renderer.setPixelRatio(Math.min(devicePixelRatio, HIGH ? 1.75 : 1.25));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = HIGH ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
@@ -244,11 +253,20 @@ const groundAt = (x, z) => {
 const insideHall = (x, z) => floors.some((f) => f.hall && inFloor(f, x, z) != null);
 
 /* ---------------- 3D props made for this temple (assets/models/*.glb) ---------------- */
+// Every model file loads through loadGlb: a failed request is tried again twice (after 1 s and 4 s: on a phone a
+// request now and then just fails), and a file that still won't load is named once in the console. A failure is not
+// remembered, so the next time the model is wanted it is asked for again.
+function loadGlb(loader, url, tries = [1000, 4000]) {
+  return new Promise((res) => loader.load(url, res, undefined, (err) => {
+    if (tries.length) setTimeout(() => loadGlb(loader, url, tries.slice(1)).then(res), tries[0]);
+    else { console.warn("Sambodhaya: couldn't load", url, err && (err.message || err)); res(null); }
+  }));
+}
 // Each prop loads once and is cloned; if a file can't load, the simple shapes stay instead.
 const propLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const propCache = {};
 function loadProp(name) {
-  if (!propCache[name]) propCache[name] = new Promise((res) => propLoader.load(`assets/models/${name}.glb`, (g) => res(g.scene), undefined, () => res(null)));
+  if (!propCache[name]) propCache[name] = loadGlb(propLoader, `assets/models/${name}.glb`).then((g) => { if (!g) delete propCache[name]; return g ? g.scene : null; });
   return propCache[name];
 }
 // scale a model so its height is h and stand it on the ground at its centre
@@ -907,6 +925,29 @@ function eaveBracket(parent, lx, y0, lz, out, up) {
   const n = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), MAT.gold); n.position.set(lx, y0 + up * 0.55, lz + out * 0.55); parent.add(n); // the naga's coil
 }
 
+// The halls' columns let the view through: where a column stands between the camera and the child, it turns
+// see-through (a fine dither, no sorting), so walking in to bow the screen isn't all pillar. The columns keep one
+// material each (still merged into one mesh per hall: no extra draw calls); SEE is set every frame by the camera.
+const SEE = { a: { value: new THREE.Vector3() }, b: { value: new THREE.Vector3() }, on: { value: 0 } };
+function seeThrough(mat, key) {
+  const prev = mat.onBeforeCompile;
+  mat.onBeforeCompile = (sh, r) => {
+    if (prev) prev(sh, r);
+    sh.uniforms.uSeeA = SEE.a; sh.uniforms.uSeeB = SEE.b; sh.uniforms.uSeeOn = SEE.on;
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vSeeW;").replace("#include <project_vertex>", "#include <project_vertex>\nvSeeW = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 vSeeW; uniform vec3 uSeeA, uSeeB; uniform float uSeeOn;")
+      .replace("void main() {", `void main() {
+        if (uSeeOn > 0.0) { // between the camera (A) and the child (B), within ~0.9 m of the line between them: dithered away
+          vec3 ab = uSeeB - uSeeA; float t = clamp(dot(vSeeW - uSeeA, ab) / dot(ab, ab), 0.0, 1.0);
+          float f = (1.0 - smoothstep(0.55, 0.95, length(vSeeW - (uSeeA + ab * t)))) * step(0.02, t) * step(t, 0.97) * uSeeOn;
+          vec2 g = mod(floor(gl_FragCoord.xy), 4.0); float bayer = mod(g.x * 2.0 + g.y * 3.0 + floor(g.y / 2.0) * 1.5, 4.0) / 4.0 + 0.125;
+          if (bayer < f * 0.85) discard;
+        }`);
+  };
+  mat.customProgramCacheKey = () => key;
+  return mat;
+}
+const COL_LACQUER = seeThrough(lacquer(0x8e1f17), "lacquer-see"), COL_GOLD = seeThrough(goldLeaf(), "gold-see");
 // A sala you can walk into: stone base, wooden floor, red lacquer columns, a two-tier roof with
 // gold gable panels and chofa finials. Walls on three sides (front open), or none for a pavilion.
 // Everything is built in the hall's own coordinates: +z is the open front.
@@ -925,9 +966,9 @@ function sala({ x, z, rot = 0, W = 13, D = 10, H = 5.6, walls = true }) {
   floors.push({ x, z, c, s, hx: W / 2 + 0.8, hz: D / 2 + 0.8, y: FY + 0.03, hall: true });
   const colGeo = new THREE.CylinderGeometry(0.28, 0.32, H, 16), capGeo = new THREE.CylinderGeometry(0.42, 0.3, 0.45, 16), footGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.25, 16);
   const column = (lx, lz, solid) => {
-    add(colGeo, MAT.lacquer, lx, FY + H / 2, lz, g);
-    add(capGeo, MAT.gold, lx, FY + H - 0.85, lz, g, false);
-    add(footGeo, MAT.gold, lx, FY + 0.12, lz, g, false);
+    add(colGeo, COL_LACQUER, lx, FY + H / 2, lz, g);
+    add(capGeo, COL_GOLD, lx, FY + H - 0.85, lz, g, false);
+    add(footGeo, COL_GOLD, lx, FY + 0.12, lz, g, false);
     if (solid) post(lx, lz, 0.45);
   };
   const beam = (w, lx, lz, ry = 0) => {
@@ -3535,7 +3576,7 @@ function poseCan(model, B) {
 // their hands are posed the same way: the monk's clasped before him, the novice's on his broom.
 const npcLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 function loadNpc(name, height) {
-  return new Promise((res) => npcLoader.load(`assets/models/${name}.glb`, res, undefined, () => res(null)))
+  return loadGlb(npcLoader, `assets/models/${name}.glb`)
     .then((main) => {
       if (!main) return null;
       const obj = main.scene, holder = new THREE.Group(); holder.add(obj); fitModel(obj, height); scene.add(holder);
@@ -4550,8 +4591,9 @@ const LITE_KITS = new Set(["boy", "boy-socks"]);
 function loadBoy(kit = "boy", copy = 1) {
   // boy.glb holds the model and its walk; the other files hold only an animation for the same skeleton
   const key = copy > 1 ? kit + "#" + copy : kit, model = !HIGH && LITE_KITS.has(kit) ? kit + "-lite" : kit;
-  if (!boyReady[key]) boyReady[key] = Promise.all([model, kit + "-idle", kit + "-run", kit + "-sit"].map((n) => new Promise((res) => boyLoader.load(`assets/models/${n}.glb`, res, undefined, () => res(null)))))
+  if (!boyReady[key]) boyReady[key] = Promise.all([model, kit + "-idle", kit + "-run", kit + "-sit"].map((n) => loadGlb(boyLoader, `assets/models/${n}.glb`)))
     .then(([walk, idle, run, sitting]) => {
+      if (!walk || !idle || !run || !sitting) delete boyReady[key]; // (asked for again next time: a missing clip too)
       if (!walk) return null;
       const obj = walk.scene, holder = new THREE.Group(); holder.add(obj); fitModel(obj);
       holder.updateMatrixWorld(true); pressHands(holder); // measure the hands in their rest pose
@@ -4575,6 +4617,12 @@ function buildAvatar() {
   });
 }
 buildAvatar();
+// back online after the child couldn't load (or the socks kit didn't): try again
+addEventListener("online", () => {
+  if (!KIDS[avatarCfg.kind]) return;
+  if (!boyKits.shod) buildAvatar();
+  else if (!boyKits.socks) { const kind = avatarCfg.kind; loadBoy(kind + "-socks").then((socks) => { if (avatarCfg.kind === kind) boyKits.socks = socks; }); }
+});
 
 const loader = new GLTFLoader();
 loader.register((p) => new VRMLoaderPlugin(p));
@@ -4614,7 +4662,8 @@ const dog = { obj: new THREE.Group(), x: 3, z: 90, y: 0, yaw: Math.PI };
   // the temple dog from the entrance artwork, as a 3D model (the block dog stays if it can't load)
   // The temple dog with a skeleton and real dog clips (dog-rig.glb: the classic model, rigged with the skeleton and
   // clips of Jack, the author's terrier; built by .dev/dogrig). If it can't load, the unrigged model walks by shader.
-  propLoader.load("assets/models/dog-rig.glb", (g) => {
+  loadGlb(propLoader, "assets/models/dog-rig.glb").then((g) => {
+    if (!g) { loadClassicDog(); return; }
     const obj = g.scene;
     dog.obj.children.forEach((c) => { c.visible = false; });
     obj.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
@@ -4627,7 +4676,7 @@ const dog = { obj: new THREE.Group(), x: 3, z: 90, y: 0, yaw: Math.PI };
     dog.rig = { mixer, A, B, pose: "stand", cur: null, busy: 0, then: null, act: null, actT: 0, easeT: 0, nextAct: 3, mesh: obj.getObjectByProperty("isSkinnedMesh", true) };
     dog.obj.updateMatrixWorld(true); dogCrown();
     dogPlay("idle", 0);
-  }, undefined, () => loadClassicDog());
+  });
 }
 function loadClassicDog() {
   loadProp("dog").then((src) => {
@@ -6383,11 +6432,30 @@ const PAIR_TURN = { boy: SHOES_TURN, girl: GIRL_SHOES_TURN }, PAIR_H = { boy: 0.
 
 /* ---------------- input ---------------- */
 const keys = {};
-let camYaw = Math.PI, camPitch = 0.32, camDist = 11;
+// the walls and roofs worth testing the camera's line of sight against: only those whose bounds come within reach of
+// it (the temple's walls never move, so each one's bounding sphere is worked out once)
+const camNearList = [];
+function camNear(from, reach) {
+  camNearList.length = 0;
+  for (const m of camBlock) {
+    let b = m.userData.camSphere;
+    if (!b) { if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere(); m.updateWorldMatrix(true, false); b = m.userData.camSphere = m.geometry.boundingSphere.clone().applyMatrix4(m.matrixWorld); }
+    if (b.center.distanceTo(from) < b.radius + reach) camNearList.push(m);
+  }
+  return camNearList;
+}
+let camYaw = Math.PI, camPitch = 0.32, camDist = 11, camIn = 0; const camWant = new THREE.Vector3(); // (camIn: how far the camera has gone over to its indoor framing)
 addEventListener("keydown", (e) => {
   if (dialogOpen()) { if (e.key === "Escape") closeDialog(); return; }
   if (e.target instanceof HTMLInputElement) return;
+  // a focused button, link or field (the HUD, by keyboard) keeps its own keys: Space and Enter press it, and don't
+  // also jump or open the place nearby (Escape still closes the menu, below)
+  if (e.target !== canvas && e.target.closest && e.target.closest("button, a, select, textarea, [role=button], [contenteditable]")) {
+    if (e.key === "Escape" && closeMenu()) e.preventDefault();
+    return;
+  }
   if (photoMode && e.key === "Escape") { setPhoto(false); return; }
+  if (e.key === "Escape" && closeMenu()) return;
   keys[e.code] = true;
   if (twoP && ["Enter", "Period", "Comma"].includes(e.code)) { // player 2, at the arrow keys
     actFor(P2);
@@ -6558,6 +6626,8 @@ function foldMenu(fold) {
 }
 foldMenu(!read("menu-open", false));
 $("btn-menu").addEventListener("click", () => foldMenu(!$("hud-tools").classList.contains("folded")));
+// Escape (or a tap on the temple) closes the open menu; true if it was open
+function closeMenu() { if ($("hud-tools").classList.contains("folded")) return false; foldMenu(true); $("btn-menu").focus(); return true; }
 $("hud-tools").addEventListener("click", (e) => { const b = e.target.closest(".chip"); if (b && !b.classList.contains("pin") && !b.hasAttribute("aria-pressed")) foldMenu(true); });
 canvas.addEventListener("pointerdown", () => { if (!$("hud-tools").classList.contains("folded")) foldMenu(true); });
 function showPrompt(p) {
@@ -6609,10 +6679,16 @@ let dialogKid = null; // which child opened the dialog (two players)
 function openDialog(title, html) {
   lastFocus = document.activeElement; try { dialogKid = kid; } catch (e) {} // (a choice made in it is that child's; before the two-player code has loaded, nobody's)
   $("dlg-title").textContent = title; $("dlg-body").innerHTML = html; $("dlg").hidden = false;
+  // everything behind it is out of reach while it is open (Tab stays in the dialog, screen readers stay in it)
+  for (const el of document.body.children) if (el !== $("dlg") && !el.contains($("dlg")) && !el.inert) { el.inert = true; el.dataset.dlgInert = "1"; }
   for (const k in keys) keys[k] = false;
   const f = $("dlg").querySelector("button, a, input"); if (f) f.focus();
 }
-function closeDialog() { $("dlg").hidden = true; if (lastFocus && lastFocus.focus) lastFocus.focus(); else canvas.focus(); }
+function closeDialog() {
+  $("dlg").hidden = true;
+  for (const el of document.querySelectorAll("[data-dlg-inert]")) { el.inert = false; delete el.dataset.dlgInert; }
+  if (lastFocus && lastFocus.focus) lastFocus.focus(); else canvas.focus();
+}
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 // Pages opened from inside the 3D temple carry ?from=3d, so the site can offer the way back here;
@@ -6620,6 +6696,11 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 // Leaving the temple and the "no 3D" map are deliberate exits, so they don't carry it.
 const to2d = (hash) => `index.html?from=3d#${hash}`;
 const SPOT_KEY = "sambodhaya-3d-spot";
+// open the temple again, standing where the child is now (after a lost picture, or a change of quality)
+function reloadHere() {
+  saveSpot();
+  const u = new URL(location.href); u.searchParams.set("return", "1"); location.href = u.toString();
+}
 function saveSpot() {
   try { sessionStorage.setItem(SPOT_KEY, JSON.stringify({ x: player.x, z: player.z, yaw: player.yaw, camYaw, camPitch, camDist, t: Date.now() })); } catch (e) {}
 }
@@ -7282,7 +7363,7 @@ const qBtn = $("btn-quality");
 qBtn.querySelector(".label").textContent = HIGH ? tx("ภาพ: ละเอียด", "Graphics: detailed") : tx("ภาพ: เบา", "Graphics: light");
 qBtn.firstChild.textContent = HIGH ? "✨ " : "⚡ ";
 qBtn.title = tx("สลับภาพละเอียด / ภาพเบา (ภาพเบาสำหรับเครื่องที่ช้า ไม่มีสวนและเงา)", "Switch detailed / light graphics (light is for slower devices: no garden, no shadows)");
-qBtn.addEventListener("click", () => { write("world-quality", HIGH ? "light" : "high"); location.reload(); });
+qBtn.addEventListener("click", () => { write("world-quality", HIGH ? "light" : "high"); reloadHere(); }); // (back where the child was)
 // sound button: off every time the page opens; the site-wide "turn off all sound" setting is respected
 $("btn-wai").addEventListener("click", () => { startWai(); canvas.focus(); });
 $("btn-sit").addEventListener("click", () => { toggleSit(); canvas.focus(); });
@@ -7305,7 +7386,7 @@ syncSound();
 $("btn-night").addEventListener("click", () => { night.on = !night.on; night.manual = true; nightButton(); dawnDuskGong(); });
 applyTime();
 const calmBtn = $("btn-calm");
-const syncCalm = () => { calmBtn.setAttribute("aria-pressed", settings.calmMotion); calmBtn.classList.toggle("on", settings.calmMotion); };
+const syncCalm = () => { calmBtn.setAttribute("aria-pressed", settings.calmMotion); calmBtn.classList.toggle("on", settings.calmMotion); document.body.classList.toggle("calm", settings.calmMotion); }; // (body.calm: the page's own fades too)
 calmBtn.addEventListener("click", () => { settings.calmMotion = !settings.calmMotion; write("settings", { ...read("settings", {}), calmMotion: settings.calmMotion }); syncCalm(); });
 syncCalm();
 
@@ -7314,7 +7395,18 @@ const SK = ["#f5d0b0", "#e8b48a", "#c98e62", "#a06a43", "#7a4b2c", "#4f3020"];
 const SH = ["#e98a2b", "#4f9a5d", "#3d8fd1", "#f27aa0", "#f2cc62", "#fffdf8", "#5d5752"];
 const PA = ["#5e4a3a", "#2f3b55", "#3f6b3a", "#7a2f2f", "#d9c7a5"];
 const HA = ["#2b1d14", "#6b3e1f", "#c98e3a", "#9aa0a6"];
-function swatches(field, list) { return `<div class="swatches" role="radiogroup">${list.map((c) => `<button class="sw${avatarCfg[field] === c ? " on" : ""}" style="background:${c}" data-sw="${field}" data-c="${c}" aria-label="${c}" role="radio" aria-checked="${avatarCfg[field] === c}"></button>`).join("")}</div>`; }
+// what each colour is called, for screen readers (in palette order)
+const SW_NAMES = {
+  skin: [["ผิวขาวอมชมพู", "very light"], ["ผิวขาวเหลือง", "light"], ["ผิวสองสี", "medium"], ["ผิวน้ำผึ้ง", "tan"], ["ผิวคล้ำ", "brown"], ["ผิวเข้ม", "dark brown"]],
+  shirt: [["สีส้มจีวร", "saffron"], ["สีเขียว", "green"], ["สีฟ้า", "blue"], ["สีชมพู", "pink"], ["สีเหลือง", "yellow"], ["สีขาว", "white"], ["สีเทาเข้ม", "dark grey"]],
+  pants: [["สีน้ำตาล", "brown"], ["สีกรมท่า", "navy"], ["สีเขียวเข้ม", "dark green"], ["สีแดงเข้ม", "dark red"], ["สีกากี", "khaki"]],
+  hair: [["สีดำ", "black"], ["สีน้ำตาลเข้ม", "dark brown"], ["สีน้ำตาลทอง", "golden brown"], ["สีเทา", "grey"]],
+};
+function swatches(field, list) {
+  // one Tab stop per palette (the chosen colour); the arrow keys move within it (see openAvatar)
+  const on = list.includes(avatarCfg[field]) ? avatarCfg[field] : list[0];
+  return `<div class="swatches" role="radiogroup">${list.map((c, i) => `<button class="sw${avatarCfg[field] === c ? " on" : ""}" style="background:${c}" data-sw="${field}" data-c="${c}" aria-label="${esc(SW_NAMES[field] && SW_NAMES[field][i] ? tx(...SW_NAMES[field][i]) : c)}" role="radio" aria-checked="${avatarCfg[field] === c}" tabindex="${c === on ? 0 : -1}"></button>`).join("")}</div>`;
+}
 function openAvatar(tab = KIDS[avatarCfg.kind] ? avatarCfg.kind : "build") {
   const tabs = `<div class="tabs" role="tablist">
     <button class="chip${tab === "boy" ? " on" : ""}" data-tab="boy">🧒 ${tx("เด็กชายสัมโพธายะ", "Sambodhaya boy")}</button>
@@ -7352,6 +7444,12 @@ function openAvatar(tab = KIDS[avatarCfg.kind] ? avatarCfg.kind : "build") {
   const ub = $("use-boy"); if (ub) ub.addEventListener("click", () => { avatarCfg.kind = "boy"; write("avatar", avatarCfg); buildAvatar(); openAvatar("boy"); });
   const ug = $("use-girl"); if (ug) ug.addEventListener("click", () => { avatarCfg.kind = "girl"; write("avatar", avatarCfg); buildAvatar(); openAvatar("girl"); });
   dlg.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => openAvatar(b.dataset.tab)));
+  dlg.querySelectorAll(".swatches").forEach((g) => g.addEventListener("keydown", (e) => { // arrows choose the next colour
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key]; if (!step) return;
+    const all = [...g.querySelectorAll("[data-sw]")], i = all.indexOf(document.activeElement); if (i < 0) return;
+    e.preventDefault(); const next = all[(i + step + all.length) % all.length]; next.click();
+    requestAnimationFrame(() => { const again = $("dlg").querySelector(`[data-sw="${next.dataset.sw}"][data-c="${next.dataset.c}"]`); if (again) again.focus(); }); // (the dialog is drawn anew)
+  }));
   dlg.querySelectorAll("[data-sw]").forEach((b) => b.addEventListener("click", () => { avatarCfg = { ...avatarCfg, kind: avatarCfg.kind === "photo" ? "photo" : "blocky", [b.dataset.sw]: b.dataset.c }; write("avatar", avatarCfg); buildBlocky(); openAvatar("build"); }));
   dlg.querySelectorAll("[data-hs]").forEach((b) => b.addEventListener("click", () => { avatarCfg.hairStyle = b.dataset.hs; if (KIDS[avatarCfg.kind]) avatarCfg.kind = "blocky"; write("avatar", avatarCfg); buildBlocky(); openAvatar("build"); }));
   dlg.querySelectorAll("[data-face]").forEach((b) => b.addEventListener("click", () => { avatarCfg.face = b.dataset.face; if (avatarCfg.kind === "photo" || KIDS[avatarCfg.kind]) { avatarCfg.kind = "blocky"; } write("avatar", avatarCfg); buildBlocky(); openAvatar("build"); }));
@@ -7394,8 +7492,24 @@ addEventListener("resize", resize); resize();
 
 let debugPause = false; // ?debug only: time stands still (the picture still redraws) while a test poses a moment
 function tick() {
-  frame(debugPause ? 0 : Math.min(clock.getDelta(), 0.05));
+  const raw = clock.getDelta();
+  if (probe.on) probeFrame(raw);
+  frame(debugPause ? 0 : Math.min(raw, 0.05));
   requestAnimationFrame(tick);
+}
+// The frame probe: in detailed graphics, with no quality chosen yet, the first ~10 s of frames after the temple opens
+// are timed (only while the page is in view); if most are slower than 24 a second, this device opens in light
+// graphics next time, and a note says so (✨ in the menu switches now, or back)
+const probe = { on: false, n: 0, slow: 0 };
+function probeFrame(raw) {
+  if (document.hidden || raw > 0.5) return; // (a pause, not a slow frame)
+  probe.n++; if (raw > 1 / 24) probe.slow++;
+  if (probe.n < 300) return;
+  probe.on = false;
+  if (probe.slow / probe.n > 0.5) {
+    write("world-quality-auto", "light");
+    toast(tx("✨ ภาพละเอียดดูจะหนักไปสำหรับเครื่องนี้ ครั้งหน้าวัดจะเปิดแบบภาพเบา (เปลี่ยนได้ที่ ✨ ในเมนู)", "✨ Detailed graphics seem heavy for this device: next time the temple opens in light graphics (✨ in the menu changes it)"), 9);
+  }
 }
 /* ---------------- two players on one device (👫) ---------------- */
 // Everything else is written for one child (player, sit, wai, shoes...). Each child has their own set of those, and
@@ -7676,18 +7790,26 @@ function frame(dt) {
   }
 
   // camera follows
-  const fp = twoP ? kidsCentre() : player, cd = twoP ? Math.min(30, Math.max(camDist, fp.sep * 0.85 + 5)) : camDist;
-  const cx = fp.x + Math.sin(camYaw) * Math.cos(camPitch) * cd;
-  const cz = fp.z + Math.cos(camYaw) * Math.cos(camPitch) * cd;
+  const fp = twoP ? kidsCentre() : player;
+  // inside a hall (lower and narrower than the courtyard) the camera comes in closer and lower, and looks a little
+  // higher, so the Buddha image and the monks stay in view; eased in and out at the doorway
+  camIn += ((insideHall(fp.x, fp.z) ? 1 : 0) - camIn) * (settings.calmMotion ? 1 : Math.min(1, dt * 3));
+  const cd = (twoP ? Math.min(30, Math.max(camDist, fp.sep * 0.85 + 5)) : camDist) * (1 - 0.3 * camIn), pitch = camPitch * (1 - 0.35 * camIn);
+  const cx = fp.x + Math.sin(camYaw) * Math.cos(pitch) * cd;
+  const cz = fp.z + Math.cos(camYaw) * Math.cos(pitch) * cd;
   const seatDrop = twoP ? fp.drop : kidDrop(); // seated or kneeling, the camera looks at where his head now is
-  const cy = fp.y + 2 - seatDrop + Math.sin(camPitch) * cd;
+  const cy = fp.y + 2 - seatDrop + Math.sin(pitch) * cd;
   // don't look through walls or roofs: pull the camera in front of whatever is in the way
   head.set(fp.x, fp.y + 2.2 - seatDrop, fp.z); tmp.set(cx, cy, cz);
-  const want = tmp.clone().sub(head), dist = want.length(); want.normalize();
+  const want = camWant.copy(tmp).sub(head), dist = want.length(); want.normalize();
   camRay.set(head, want); camRay.far = dist;
-  const hit = camRay.intersectObjects(camBlock, false)[0];
+  const hit = camRay.intersectObjects(camNear(head, dist), false)[0];
   if (hit) tmp.copy(head).addScaledVector(want, Math.max(1.2, hit.distance - 0.35));
-  if (settings.calmMotion || hit || camera.position.distanceTo(tmp) > 8) camera.position.copy(tmp); else camera.position.lerp(tmp, 1 - Math.exp(-8 * dt)); // (a jump across the temple snaps)
+  // a wall coming between: the camera moves in quickly but smoothly (no pop at a doorway); a jump across the temple,
+  // or calm motion, snaps
+  if (settings.calmMotion || camera.position.distanceTo(tmp) > 8) camera.position.copy(tmp); else camera.position.lerp(tmp, 1 - Math.exp(-(hit ? 22 : 8) * dt));
+  SEE.a.value.copy(camera.position); SEE.b.value.copy(head); SEE.on.value = 1; // (columns between them let the view through)
+  head.y += 0.5 * camIn; // (indoors the aim is a little higher)
   // after walking to a leaf on the great Bodhi tree, the camera turns up toward it, and back down once he walks on
   if (leafLook.on && Math.hypot(player.x - leafLook.x, player.z - leafLook.z) > 1.2) leafLook.on = false;
   const sel = leafLook.on && leafTree.byId.get(leafTree.sel);
@@ -7918,7 +8040,9 @@ restoreSpot(); // back from a page of the site: stand where you were
 if (/[?&]debug\b/.test(location.search)) window.__w = { THREE, renderer, camera, keys, reflectors, two: () => ({ P1, P2, twoP, owner, kid }), meal, setMealTime: (v) => { mealForce = v; }, scene, salas, sound, player, dog, dogAnim, wai, startWai, poseWai, buddhaImages, monkFigures, almsMonks, almsScene, almsShow, alms, startAlms, almsState, shoes, boyKits, startShoes, insideHall, wearKit, colliders, blockers, gardenSpots, paths, floors, ponds, WAI_LEVELS, sit, startSit, standUp, cushionSpots, kraap, startKraap, kraapState, startGreet, startKathin, kathinSpots, feed, startFeed, fishes, food, onBridge, merit, startMerit, meritHere, broom, fallenLeaves, can, waterPots, startWater, fold, startFold, foldPetal, altars, gildImage, night, leafTree, showLeaf, lane, novice, birds, cat, rain, petals, catShow, catPlan, pet, startPetDog, startPetCat, petStroke, curlSeated, look: (eye, at) => { camera.position.set(...eye); camera.lookAt(...at); if (composer) composer.render(); else renderer.render(scene, camera); }, step: (n = 1, dt = 0.05) => { for (let i = 0; i < n; i++) frame(dt); }, boards, pause: (v = true) => { debugPause = v; }, setCam: (y, p, d) => { camYaw = y; if (p != null) camPitch = p; if (d != null) camDist = d; } };
 // (on a phone the temple shows sooner: models still on their way pop in when they arrive)
 Promise.race([Promise.all(propJobs), new Promise((r) => setTimeout(r, phone ? 4000 : 7000))]).then(() => {
+  if (window.templeStarted) window.templeStarted();
   $("loading").hidden = true;
+  if (HIGH && read("world-quality", null) === null && read("world-quality-auto", null) === null) probe.on = true; // (time the first frames: see probeFrame)
   canvas.focus(); track("w_loaded");
   const atGate = Math.hypot(player.x, player.z - 93) < 8;
   if (leafLink) goToLinkedLeaf(); // a link to a leaf on the silver and gold Bodhi tree: straight to it

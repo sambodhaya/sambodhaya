@@ -780,7 +780,6 @@ function FeedbackForm({ onDone, compact }) {
   const [msg, setMsg] = useState("");
   const [device, setDevice] = useState(true);
   const [file, setFile] = useState(null);
-  const [email, setEmail] = useState("");
   const [state, setState] = useState("idle"); // idle | sending | sent | error
   const page = (location.hash || "#gate") + (document.referrer.includes("world.html") ? " (from 3D)" : "");
   const deviceInfo = `${innerWidth}x${innerHeight} · ${navigator.userAgent.replace(/\s*\([^)]*\)/g, " ").slice(0, 120)}`;
@@ -790,7 +789,7 @@ function FeedbackForm({ onDone, compact }) {
     e.preventDefault(); if (!canSend) return;
     setState("sending");
     try {
-      await sendForm("feedback", { type, message: msg.trim(), page, lang, device: device ? deviceInfo : "(not shared)", email: email.trim(), "bot-field": "" }, file);
+      await sendForm("feedback", { type, message: msg.trim(), page, lang, device: device ? deviceInfo : "(not shared)", "bot-field": "" }, file);
       setState("sent");
     } catch (err) { setState("error"); }
   };
@@ -822,9 +821,6 @@ function FeedbackForm({ onDone, compact }) {
           <input id="fb-file" type="file" accept="image/*" onChange={(e) => setFile(e.target.files[0] || null)} />
         </label>
         {tooBig && <p className="notice">{t(UI("ไฟล์ใหญ่เกิน 5 MB", "The file is larger than 5 MB"))}</p>}
-        <label className="fb-field" htmlFor="fb-email">{t(UI("อีเมลสำหรับตอบกลับ (สำหรับผู้ใหญ่เท่านั้น)", "Email for a reply (adults only)"))}
-          <input id="fb-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-        </label>
       </details>
       <div className="fb-attach">
         <span>{t(UI("แนบไปด้วย:", "Attached:"))} <code>{page}</code></span>
@@ -1003,7 +999,7 @@ function Support() {
               <label className="fb-field" htmlFor="l-wish">{t(UI("คำอธิษฐานสั้น ๆ (ไม่ใส่ก็ได้)", "A short wish (optional)"))}<input id="l-wish" maxLength={80} value={f.leafWish} onChange={set("leafWish")} /></label>
             </div>
           </div>}
-          {wantLeaf && <p className="quiet">{t(UI("ใบโพธิ์จะขึ้นต้นเมื่อผู้ดูแลตรวจยอดโอนแล้ว ชื่อและข้อความบนใบทุกคนเห็นได้และอยู่บนต้นต่อไป (ไม่แสดงจำนวนเงิน) ขอเอาลงได้ทุกเมื่อที่ ", "Your leaf goes up once the caretakers have checked the transfer. Everyone can see the name and words on it, and it stays on the tree (the amount is never shown). Ask us to take it down any time at "))}{S.contact || "…"}</p>}
+          {wantLeaf && <p className="notice">{t(UI("โปรดทราบ: ใบโพธิ์เป็นของสาธารณะและเก็บไว้ถาวร เมื่อผู้ดูแลตรวจยอดโอนแล้ว ชื่อ คำอุทิศ และคำอธิษฐานบนใบจะแสดงบนต้นโพธิ์ให้ทุกคนเห็น และอยู่บนต้นตลอดไป ไม่ลบเองเมื่อครบกำหนดเหมือนสลิป (ไม่แสดงจำนวนเงิน) ขอเอาใบลงได้ทุกเมื่อที่ ", "Please note: a leaf is public and permanent. Once the caretakers have checked the transfer, the name, dedication and wish on it are shown on the tree for everyone to see. They stay there permanently and are not deleted after a set time like the slip (the amount is never shown). Ask us to take the leaf down any time at "))}{S.contact || "…"}</p>}
         </fieldset>
         <label className="fb-field" htmlFor="d-slip">{t(UI("สลิปการโอน (รูปหรือ PDF ไม่เกิน 8 MB)", "Transfer slip (image or PDF, up to 8 MB)"))} *
           <input id="d-slip" type="file" accept="image/*,application/pdf" onChange={(e) => setFile(e.target.files[0] || null)} />
@@ -1020,7 +1016,7 @@ function Support() {
             <label className={"fb-type" + (f.thanks === "public" ? " on" : "")}><input type="radio" name="d-thanks" value="public" checked={f.thanks === "public"} onChange={set("thanks")} /> {t(UI("แสดงชื่อในรายชื่อผู้สนับสนุน (ไม่แสดงจำนวนเงิน)", "Show my name on the supporters list (never the amount)"))}</label>
           </fieldset>
         )}
-        <label className="toggle consent"><input type="checkbox" checked={f.agree} onChange={set("agree")} /> <span>{t(UI("ฉันอายุ 18 ปีขึ้นไป และยินยอมให้เก็บข้อมูลและสลิปไว้เพื่อการตรวจสอบ", "I am 18+ and consent to my slip data being kept for audit purposes"))} ({S.retentionDays ? `${S.retentionDays} ${t(UI("วัน", "days"))}` : "…"}) *</span></label>
+        <label className="toggle consent"><input type="checkbox" checked={f.agree} onChange={set("agree")} /> <span>{t(UI("ฉันอายุ 18 ปีขึ้นไป และยินยอมให้เก็บข้อมูลและสลิปไว้เพื่อการตรวจสอบ", "I am 18+ and consent to my slip data being kept for audit purposes"))} ({S.retentionDays ? `${S.retentionDays} ${t(UI("วัน", "days"))}` : "…"}){wantLeaf && t(UI(" และยินยอมให้แสดงชื่อ คำอุทิศ และคำอธิษฐานบนใบโพธิ์ต่อสาธารณะและเก็บไว้ถาวร", ", and to the name, dedication and wish on my leaf being shown publicly on the tree and kept permanently"))} *</span></label>
         <p className="quiet">{t(UI("ข้อมูลและสลิปใช้เพื่อยืนยันการโอน การทำบัญชีและการตรวจสอบ และเพื่อขอบคุณเท่านั้น แล้วลบทิ้ง ขอลบได้ที่ ", "The information and slip are used only to verify the transfer, for accounting and audit checks, and to thank you, then deleted. Request deletion at "))}{S.contact || "…"}</p>
         {!ready && <p className="notice"><Tag kind="unknown" /> {t(UI("ยังส่งไม่ได้: รอข้อมูลจริงจากทีม", "Can't be sent yet: awaiting from the team"))}: {[
           !(S.promptpayQr || S.promptpayId || S.bank) && t(UI("บัญชีรับเงิน", "the account")),
@@ -1195,6 +1191,30 @@ function TreePage({ focus }) {
 }
 
 /* ---------- app shell & router ---------- */
+// If a page breaks (for example a bad content shape from the CMS), show a calm page with a way back instead of a blank screen.
+// Keyed by the route in App, so going to another page clears it.
+class ErrorBoundary extends React.Component {
+  static contextType = Ctx;
+  constructor(p) { super(p); this.state = { broken: false }; }
+  static getDerivedStateFromError() { return { broken: true }; }
+  componentDidCatch(error, info) { console.error("Sambodhaya: a page could not be shown", error, info && info.componentStack); }
+  render() {
+    if (!this.state.broken) return this.props.children;
+    const c = this.context || {}, t = c.t || ((x) => (typeof x === "string" ? x : x.th));
+    const to = (v) => (c.go ? c.go(v) : (location.hash = v));
+    return (
+      <section className="zone rest" role="alert">
+        <h1 className="zone-title"><span aria-hidden="true">🌿</span> {t(UI("หน้านี้ยังเปิดไม่ได้", "This page can't open right now"))}</h1>
+        <p className="rest-line">{t(UI("ไม่เป็นไร พักตรงนี้ก่อนได้", "That's all right. You can rest here first."))}</p>
+        <p className="quiet center">{t(UI("มีบางอย่างในหน้านี้ผิดพลาด ไม่ใช่ความผิดของคุณ ลองกลับไปที่พื้นที่พักสงบหรือประตูวัด แล้วค่อยลองใหม่", "Something on this page went wrong. It isn't your fault. Go back to the quiet rest area or the temple gate, and try again later."))}</p>
+        <div className="row center">
+          <button className="btn" onClick={() => to("rest")}>🌿 {t(UI("ไปพื้นที่พักสงบ", "Go to the rest area"))}</button>
+          <button className="chip" onClick={() => to("gate")}>↩️ {t(UI("กลับประตูวัด", "Back to the temple gate"))}</button>
+        </div>
+      </section>
+    );
+  }
+}
 const VIEWS = ["gate", "yard", "learn", "unit", "library", "media", "access", "rest", "care", "exit", "garden", "journey", "support", "feedback", "tree"];
 function parseHash() {
   const h = (location.hash || "").replace("#", "");
@@ -1236,21 +1256,23 @@ function App() {
       )}
       <Prototype />
       <main id="main" ref={main} tabIndex={-1}>
-        {V === "gate" && <Gate />}
-        {V === "yard" && <Yard />}
-        {V === "learn" && <Learn />}
-        {V === "unit" && <Unit key={route.arg} k={route.arg} />}
-        {V === "library" && <Library />}
-        {V === "media" && <Media focus={route.arg} />}
-        {V === "access" && <Access />}
-        {V === "rest" && <Rest />}
-        {V === "care" && <Care />}
-        {V === "exit" && <Exit />}
-        {V === "garden" && <Garden />}
-        {V === "journey" && <Journey />}
-        {V === "support" && <Support />}
-        {V === "tree" && <TreePage focus={route.arg} />}
-        {V === "feedback" && <FeedbackPage />}
+        <ErrorBoundary key={V + ":" + route.arg}>
+          {V === "gate" && <Gate />}
+          {V === "yard" && <Yard />}
+          {V === "learn" && <Learn />}
+          {V === "unit" && <Unit key={route.arg} k={route.arg} />}
+          {V === "library" && <Library />}
+          {V === "media" && <Media focus={route.arg} />}
+          {V === "access" && <Access />}
+          {V === "rest" && <Rest />}
+          {V === "care" && <Care />}
+          {V === "exit" && <Exit />}
+          {V === "garden" && <Garden />}
+          {V === "journey" && <Journey />}
+          {V === "support" && <Support />}
+          {V === "tree" && <TreePage focus={route.arg} />}
+          {V === "feedback" && <FeedbackPage />}
+        </ErrorBoundary>
       </main>
       {V !== "feedback" && <FeedbackWidget />}
       {V === "gate" ? <footer className="foot"><Wayfinding /><a className="adult-link" href="#support">🤲 {t(UI("สมทบทุนพัฒนาและสร้างวัด (สำหรับผู้ใหญ่)", "Support the temple's development (for adults)"))}</a><a className="adult-link" href="#tree">🍃 {t(UI("ต้นโพธิ์เงิน-โพธิ์ทอง", "The silver and gold Bodhi tree"))}</a><CommunityLink /></footer> : <footer className="foot"><p className="rights">{t(UI("ที่นี่คุณ ถามได้ • ไม่เชื่อได้ • ตรวจได้ • ข้ามได้ • พักได้ • ออกได้", "Here you may ask • disagree • check • skip • rest • leave"))}</p><a className="adult-link" href="#support">🤲 {t(UI("สมทบทุนพัฒนาและสร้างวัด (สำหรับผู้ใหญ่)", "Support the temple's development (for adults)"))}</a><a className="adult-link" href="#tree">🍃 {t(UI("ต้นโพธิ์เงิน-โพธิ์ทอง", "The silver and gold Bodhi tree"))}</a><CommunityLink /></footer>}

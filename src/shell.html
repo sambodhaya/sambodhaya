@@ -17,7 +17,8 @@
   --paper: #fdf8ee;        /* temple paper */
   --cream: #fffdf8;
   --saffron: #e98a2b;      /* robe */
-  --saffron-deep: #a5560f;
+  --saffron-deep: #a5560f; /* button background: cream text on it is 5.25:1 (on --saffron only 2.54:1) */
+  --saffron-darker: #8a4609; /* hover/pressed buttons: 6.98:1 with cream */
   --leaf: #4f9a5d;         /* Bodhi leaf */
   --leaf-soft: #e6f3e3;
   --sky-soft: #e4f2fa;
@@ -32,7 +33,7 @@
   color-scheme: light;
 }
 :root[data-size="s"] { --fs: 15px; } :root[data-size="l"] { --fs: 20px; } :root[data-size="xl"] { --fs: 24px; }
-:root[data-contrast="on"] { --ink: #120b05; --muted: #2f2419; --line-soft: #8a7a66; --paper: #ffffff; --cream: #ffffff; }
+:root[data-contrast="on"] { --ink: #120b05; --muted: #2f2419; --line-soft: #8a7a66; --paper: #ffffff; --cream: #ffffff; --saffron-deep: #8a4609; --saffron-darker: #6b3606; } /* buttons 7.09:1, AAA */
 html { background: var(--paper); font-size: var(--fs); overflow-x: clip; }
 body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--body); line-height: 1.65; -webkit-font-smoothing: antialiased; }
 #root { max-width: 1280px; margin: 0 auto; padding-inline: 16px; padding-block: 0 40px; }
@@ -53,8 +54,10 @@ main { outline: none; }
 code { font-size: .82em; background: var(--leaf-soft); border-radius: 6px; padding: 1px 6px; overflow-wrap: anywhere; }
 
 /* buttons */
-.btn { background: var(--saffron); color: var(--cream); border: var(--line); border-radius: 14px; padding: 8px 20px; font-family: var(--display); font-size: 1.1rem; box-shadow: var(--pop); }
+.btn { background: var(--saffron-deep); color: var(--cream); border: var(--line); border-radius: 14px; padding: 8px 20px; font-family: var(--display); font-size: 1.1rem; box-shadow: var(--pop); }
 .btn.big { font-size: 1.35rem; padding: 10px 30px; }
+.btn:hover:not(:disabled) { background: var(--saffron-darker); }
+.btn:active:not(:disabled) { background: var(--saffron-darker); box-shadow: 1px 1px 0 rgba(58, 42, 29, .55); transform: translate(2px, 2px); }
 .chip { background: var(--cream); border: 1.5px solid var(--ink); border-radius: 999px; padding: 4px 14px; font-size: .95rem; }
 .chip.on { background: var(--gold); }
 .chip:disabled { opacity: .5; cursor: default; }
@@ -73,12 +76,12 @@ code { font-size: .82em; background: var(--leaf-soft); border-radius: 6px; paddi
 .way { background: var(--cream); border: 1.5px solid var(--ink); border-radius: 999px; padding: 3px 12px; font-size: .9rem; }
 a.way { color: var(--ink); text-decoration: none; display: inline-block; }
 .way.exit { background: #fbe9dc; }
-.proto { margin: 10px auto 0; font-size: .85rem; color: var(--muted); background: #fff6dc; border: 1.5px dashed #d9b75a; border-radius: 12px; padding: 6px 12px; max-width: none; }
+.proto { margin: 10px auto 0; font-size: .9rem; color: var(--muted); background: #fff6dc; border: 1.5px dashed #d9b75a; border-radius: 12px; padding: 6px 12px; max-width: none; }
 .foot { margin-top: 36px; padding-top: 16px; border-top: 1.5px solid var(--line-soft); text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .rights { font-family: var(--display); color: var(--leaf); }
 
 /* labels 📜 📝 💡 🕯️ */
-.tag { display: inline-flex; align-items: center; gap: 4px; font-size: .78rem; border-radius: 999px; padding: 1px 10px; border: 1.5px solid var(--ink); white-space: nowrap; font-family: var(--body); }
+.tag { display: inline-flex; align-items: center; gap: 4px; font-size: .9rem; border-radius: 999px; padding: 1px 10px; border: 1.5px solid var(--ink); white-space: nowrap; font-family: var(--body); }
 .tag-source { background: #f7e6c4; } .tag-translation { background: #e6eefb; } .tag-explain { background: #fff1b8; } .tag-unknown { background: #ece6f4; } .tag-draft { background: #fde3e3; }
 .teach { display: flex; flex-direction: column; gap: 6px; background: var(--cream); border-left: 5px solid var(--gold); border-radius: 0 14px 14px 0; padding: 10px 14px; max-width: 70ch; }
 .teach.k-source { border-left-color: #c99a45; }
@@ -99,10 +102,10 @@ a.way { color: var(--ink); text-decoration: none; display: inline-block; }
 .hotspot:hover .pin, .hotspot:focus-visible .pin { background: var(--gold); }
 .world-link { background: var(--leaf); text-decoration: none; }
 /* the 3D way in, on the hero picture: centred, over the leaves of the great tree (no painted text there) */
-.hero-3d { position: absolute; left: 50%; transform: translateX(-50%); top: 13%; white-space: nowrap; display: flex; align-items: center; gap: 10px; line-height: 1.2; padding: 6px 16px 6px 6px; background: var(--saffron); color: var(--cream); text-decoration: none; font-family: var(--display); font-size: clamp(.95rem, 1.3vw, 1.25rem); border: 2px solid var(--ink); border-radius: 999px; box-shadow: 0 3px 0 rgba(58, 42, 29, .55), 0 6px 18px rgba(40, 25, 10, .35); }
+.hero-3d { position: absolute; left: 50%; transform: translateX(-50%); top: 13%; white-space: nowrap; display: flex; align-items: center; gap: 10px; line-height: 1.2; padding: 6px 16px 6px 6px; background: var(--saffron-deep); color: var(--cream); text-decoration: none; font-family: var(--display); font-size: clamp(.95rem, 1.3vw, 1.25rem); border: 2px solid var(--ink); border-radius: 999px; box-shadow: 0 3px 0 rgba(58, 42, 29, .55), 0 6px 18px rgba(40, 25, 10, .35); }
 .hero-3d img { width: clamp(48px, 5vw, 84px); height: auto; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 999px; border: 2px solid var(--cream); }
-.hero-3d:hover { background: var(--saffron-deep); }
-.hero-3d:focus-visible { outline: 3px solid var(--cream); outline-offset: 2px; box-shadow: 0 0 0 6px var(--saffron-deep); }
+.hero-3d:hover { background: var(--saffron-darker); }
+.hero-3d:focus-visible { outline: 3px solid var(--cream); outline-offset: 2px; box-shadow: 0 0 0 6px var(--ink); }
 @media (max-width: 640px) { .hero-3d { display: none; } }
 /* the two ways in, side by side under the hero picture (stacked on phones) */
 .ways-title { font-size: 1.5rem; text-align: center; margin: 4px 0 -4px; }
@@ -125,11 +128,11 @@ a.way { color: var(--ink); text-decoration: none; display: inline-block; }
   .way-icon { width: 80px; height: auto; flex: none; border-bottom: 0; border-right: 2px solid var(--ink); }
   .way-text { padding: 10px 12px; }
   .way-name { font-size: 1.15rem; }
-  .way-sub { font-size: .84rem; }
+  .way-sub { font-size: .9rem; }
 }
 .gate-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center; }
 .bell { display: flex; flex-direction: column; align-items: center; gap: 2px; background: var(--leaf-soft); border: 1.5px solid var(--ink); border-radius: 16px; padding: 8px 18px; font-family: var(--display); font-size: 1.1rem; }
-.bell-note { font-family: var(--body); font-size: .8rem; color: var(--muted); }
+.bell-note { font-family: var(--body); font-size: .9rem; color: var(--muted); }
 .hubs-title { font-size: 1.5rem; text-align: center; }
 .hubs { list-style: none; margin: 0; padding: 0; width: 100%; max-width: 920px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .hub { width: 100%; height: 100%; display: flex; gap: 10px; align-items: center; text-align: left; background: var(--cream); border: 1.5px solid var(--ink); border-radius: 16px; padding: 10px 12px; box-shadow: var(--pop); }
@@ -137,8 +140,8 @@ a.way { color: var(--ink); text-decoration: none; display: inline-block; }
 .hub-thumb { flex: none; width: 84px; height: 56px; object-fit: cover; border-radius: 10px; border: 1.5px solid var(--ink); }
 .hub-text { display: flex; flex-direction: column; min-width: 0; }
 .hub-name { font-family: var(--display); font-size: 1.12rem; }
-.hub-sub { font-size: .86rem; color: var(--muted); }
-.privacy { font-size: .85rem; color: var(--muted); }
+.hub-sub { font-size: .9rem; color: var(--muted); }
+.privacy { font-size: .9rem; color: var(--muted); }
 
 /* zones */
 .zone { display: flex; flex-direction: column; gap: 16px; margin-top: 18px; }
@@ -174,7 +177,7 @@ a.way { color: var(--ink); text-decoration: none; display: inline-block; }
 .questions { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .q-card { width: 100%; height: 100%; display: flex; flex-direction: column; gap: 6px; text-align: left; padding: 14px 16px; background: var(--cream); border: var(--line); border-radius: 18px; box-shadow: var(--pop); min-width: 0; }
 .q-text { font-family: var(--display); font-size: 1.2rem; line-height: 1.35; }
-.q-meta { font-size: .88rem; color: var(--muted); }
+.q-meta { font-size: .9rem; color: var(--muted); }
 
 /* one story */
 .crumb { font-size: .9rem; color: var(--muted); }
@@ -334,7 +337,6 @@ textarea { font: inherit; width: 100%; box-sizing: border-box; border: 1.5px sol
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
 
 @media (max-width: 720px) {
-  .proto { font-size: .78rem; }
   .hotspot { display: none; }
   .hubs { grid-template-columns: minmax(0, 1fr) !important; gap: 10px; }
   .hub { min-height: 72px; padding: 12px 16px; border-width: 2px; }
@@ -370,7 +372,7 @@ textarea { font: inherit; width: 100%; box-sizing: border-box; border: 1.5px sol
 </div>
 <!-- Static copies of the forms so Netlify Forms can detect them at deploy time. The app posts to these by name. -->
 <form name="feedback" data-netlify="true" netlify-honeypot="bot-field" enctype="multipart/form-data" hidden>
-  <input name="type"><textarea name="message"></textarea><input name="page"><input name="lang"><input name="device"><input name="email"><input type="file" name="attachment"><input name="bot-field">
+  <input name="type"><textarea name="message"></textarea><input name="page"><input name="lang"><input name="device"><input type="file" name="attachment"><input name="bot-field">
 </form>
 <form name="donation" data-netlify="true" netlify-honeypot="bot-field" enctype="multipart/form-data" hidden>
   <input name="name"><input name="amount"><input name="date"><input name="time"><input name="method"><textarea name="note"></textarea><input name="email"><input name="thanks"><input name="adult"><input name="consent"><input name="lang"><input name="leaf_id"><input name="leaf_metal"><input name="leaf_name"><input name="leaf_dedication"><input name="leaf_wish"><input type="file" name="attachment"><input name="bot-field">

@@ -4,5 +4,37 @@
   command = "python3 src/build.py"
   publish = "dist"
 
+# pinned, so a change on Netlify's side doesn't change the build (esbuild itself is pinned in src/build.py)
+[build.environment]
+  NODE_VERSION = "22"
+  PYTHON_VERSION = "3.11"
+
 [functions]
   directory = "netlify/functions"
+
+# Prototype, not for public release: nothing is to be indexed (robots.txt says the same).
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    X-Content-Type-Options = "nosniff"
+
+# the records page and the admin may not be shown inside another site's frame; records are never cached
+[[headers]]
+  for = "/records*"
+  [headers.values]
+    Content-Security-Policy = "frame-ancestors 'none'"
+    Cache-Control = "no-store"
+
+[[headers]]
+  for = "/admin*"
+  [headers.values]
+    Content-Security-Policy = "frame-ancestors 'none'"
+
+# vendor/ holds published library builds with the version in the path (three@0.169.0/...), so they never change
+# under the same name. No such long cache for img/, audio/ or assets/: their file names carry no version.
+[[headers]]
+  for = "/vendor/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
