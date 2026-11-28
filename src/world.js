@@ -18,16 +18,17 @@ import { read, write, settings, L, tx, txo } from "./world/settings.js";
 import { createTrack } from "./world/analytics.js";
 import { loadGlb, propLoader, loadProp, fitTo, fitModel } from "./world/assets.js";
 import { smooth, smooth as smoothT, inFloor, paveNoise, rockNoise, basisQuat } from "./world/math.js";
+import { loadContent, setPageLanguage } from "./world/boot.js";
+import { $, esc, initDialog, dialogOpen, dialogKid, openDialog, closeDialog, toast } from "./world/ui.js";
+import { to2d, saveSpotData, returnURL, takeSpot } from "./world/spot.js";
+import { probe, probeFrame } from "./world/probe.js";
 
 /* ---------------- settings shared with the 2D site ---------------- */
 // (read, write, settings and the language, L, tx and txo: src/world/settings.js)
 // What the temple says (hall names, signs, boards, info cards, the stories) lives in content/, edited through /admin;
 // src/build.py joins it into content/site.json. Here only the code: where things stand and how they behave.
-const CONTENT = await fetch("content/site.json", { cache: "no-cache" })
-  .then((r) => { if (!r.ok) throw new Error(`content/site.json: ${r.status}`); return r.json(); })
-  .catch((e) => { if (window.templeFail) window.templeFail(e); throw e; }); // (world.html then says the temple couldn't open, with a way on)
-document.documentElement.lang = L;
-document.querySelectorAll("[data-th]").forEach((el) => { el.textContent = el.dataset[L]; });
+const CONTENT = await loadContent(); // (src/world/boot.js; if it fails, world.html says the temple couldn't open, with a way on)
+setPageLanguage();
 
 /* ---------------- places: each opens the matching page of the site ---------------- */
 const PLACES = [
@@ -6360,6 +6361,7 @@ const PAIR_TURN = { boy: SHOES_TURN, girl: GIRL_SHOES_TURN }, PAIR_H = { boy: 0.
 
 /* ---------------- input ---------------- */
 const keys = {};
+initDialog({ canvas, keys, getKid: () => kid }); // (the dialog: src/world/ui.js; `kid` is the two-player code's, below)
 // the walls and roofs worth testing the camera's line of sight against: only those whose bounds come within reach of
 // it (the temple's walls never move, so each one's bounding sphere is worked out once)
 const camNearList = [];
@@ -6539,7 +6541,7 @@ function collide(nx, nz) {
 }
 
 /* ---------------- UI: prompt, dialogs ---------------- */
-const $ = (id) => document.getElementById(id);
+// ($, esc, the dialog and the toasts: src/world/ui.js)
 let near = null;
 function placeName(p) { return L === "en" ? p.en : p.th; }
 let promptRest = null, promptAway = false;
@@ -6601,45 +6603,16 @@ function ringBell() {
   if (settings.mute) { askSound(); return; }
   sound.bell(BELL[0], 3.4, BELL[1]); stamp("bell"); questEvent("ringBell");
 }
-const dialogOpen = () => !$("dlg").hidden;
-let lastFocus = null;
-let dialogKid = null; // which child opened the dialog (two players)
-function openDialog(title, html) {
-  lastFocus = document.activeElement; try { dialogKid = kid; } catch (e) {} // (a choice made in it is that child's; before the two-player code has loaded, nobody's)
-  $("dlg-title").textContent = title; $("dlg-body").innerHTML = html; $("dlg").hidden = false;
-  // everything behind it is out of reach while it is open (Tab stays in the dialog, screen readers stay in it)
-  for (const el of document.body.children) if (el !== $("dlg") && !el.contains($("dlg")) && !el.inert) { el.inert = true; el.dataset.dlgInert = "1"; }
-  for (const k in keys) keys[k] = false;
-  const f = $("dlg").querySelector("button, a, input"); if (f) f.focus();
-}
-function closeDialog() {
-  $("dlg").hidden = true;
-  for (const el of document.querySelectorAll("[data-dlg-inert]")) { el.inert = false; delete el.dataset.dlgInert; }
-  if (lastFocus && lastFocus.focus) lastFocus.focus(); else canvas.focus();
-}
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-
-// Pages opened from inside the 3D temple carry ?from=3d, so the site can offer the way back here;
-// the spot (position, facing and view) is kept for this browser tab only, and restored on return.
-// Leaving the temple and the "no 3D" map are deliberate exits, so they don't carry it.
-const to2d = (hash) => `index.html?from=3d#${hash}`;
-const SPOT_KEY = "sambodhaya-3d-spot";
+// The way to the site's pages and back (?from=3d, the spot kept for this tab): src/world/spot.js
 // open the temple again, standing where the child is now (after a lost picture, or a change of quality)
 function reloadHere() {
   saveSpot();
-  const u = new URL(location.href); u.searchParams.set("return", "1"); location.href = u.toString();
+  location.href = returnURL(location.href);
 }
-function saveSpot() {
-  try { sessionStorage.setItem(SPOT_KEY, JSON.stringify({ x: player.x, z: player.z, yaw: player.yaw, camYaw, camPitch, camDist, t: Date.now() })); } catch (e) {}
-}
+function saveSpot() { saveSpotData({ x: player.x, z: player.z, yaw: player.yaw, camYaw, camPitch, camDist }); }
 addEventListener("click", (e) => { const a = e.target.closest && e.target.closest('a[href*="from=3d"]'); if (a) { saveSpot(); const h = (a.getAttribute("href").split("#")[1] || ""); if (h === "support" || h === "tree") track("to_" + h); } }, true);
 function restoreSpot() {
-  const nav = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
-  const returning = /[?&]return=1\b/.test(location.search) || (nav && nav.type === "back_forward");
-  if (!returning) return false;
-  let spot = null; try { spot = JSON.parse(sessionStorage.getItem(SPOT_KEY) || "null"); } catch (e) {}
-  if (/[?&]return=1\b/.test(location.search)) { try { history.replaceState(null, "", location.pathname + location.search.replace(/[?&]return=1\b/, "").replace(/^&/, "?")); } catch (e) {} }
-  if (!spot || Date.now() - spot.t > 6 * 3600 * 1000) return false;
+  const spot = takeSpot(); if (!spot) return false;
   player.x = spot.x; player.z = spot.z; player.yaw = spot.yaw; player.y = groundAt(spot.x, spot.z);
   camYaw = spot.camYaw; camPitch = spot.camPitch; camDist = spot.camDist;
   dog.x = player.x + 1.5; dog.z = player.z + 1.5;
@@ -7091,14 +7064,7 @@ const HINTS = {
 const questState = { active: null, ticks: {}, done: [], ...read("quests", {}) };
 const saveQuests = () => write("quests", questState);
 const questOf = (id) => QUESTS.find((q) => q.id === id);
-// small notes near the top of the screen, one after another
-const toasts = []; let toastBusy = false;
-function toast(html, secs = 7) { toasts.push([html, secs]); if (!toastBusy) nextToast(); }
-function nextToast() {
-  const el = $("toast"), n = toasts.shift(); if (!el) return;
-  if (!n) { el.hidden = true; toastBusy = false; return; }
-  toastBusy = true; el.innerHTML = n[0]; el.hidden = false; setTimeout(nextToast, n[1] * 1000);
-}
+// (small notes near the top of the screen, one after another: toast, src/world/ui.js)
 const hintShown = {}; // once per visit
 function hint(k) { if (hintShown[k]) return; hintShown[k] = true; toast(`💡 ${esc(tx(...HINTS[k]))}`, 8); }
 function questEvent(ev) {
@@ -7425,20 +7391,7 @@ function tick() {
   frame(debugPause ? 0 : Math.min(raw, 0.05));
   requestAnimationFrame(tick);
 }
-// The frame probe: in detailed graphics, with no quality chosen yet, the first ~10 s of frames after the temple opens
-// are timed (only while the page is in view); if most are slower than 24 a second, this device opens in light
-// graphics next time, and a note says so (✨ in the menu switches now, or back)
-const probe = { on: false, n: 0, slow: 0 };
-function probeFrame(raw) {
-  if (document.hidden || raw > 0.5) return; // (a pause, not a slow frame)
-  probe.n++; if (raw > 1 / 24) probe.slow++;
-  if (probe.n < 300) return;
-  probe.on = false;
-  if (probe.slow / probe.n > 0.5) {
-    write("world-quality-auto", "light");
-    toast(tx("✨ ภาพละเอียดดูจะหนักไปสำหรับเครื่องนี้ ครั้งหน้าวัดจะเปิดแบบภาพเบา (เปลี่ยนได้ที่ ✨ ในเมนู)", "✨ Detailed graphics seem heavy for this device: next time the temple opens in light graphics (✨ in the menu changes it)"), 9);
-  }
-}
+// (the frame probe, which can make this device open in light graphics next time: src/world/probe.js)
 /* ---------------- two players on one device (👫) ---------------- */
 // Everything else is written for one child (player, sit, wai, shoes...). Each child has their own set of those, and
 // before a child's part of the step (or their key, button or menu choice) that child's set is put in place (bindKid).
@@ -7573,7 +7526,7 @@ $("btn-two").addEventListener("click", () => {
     <li><button data-two="${mine}"><span class="ic">${mine === "girl" ? "👧" : "👦"}</span><span>${esc(mine === "girl" ? tx("เด็กหญิงอีกคน", "Another girl") : tx("เด็กชายอีกคน", "Another boy"))}</span></button></li></ul>
     <div class="row"><button class="chip" data-close>${esc(tx("ปิด", "Close"))}</button></div>`);
 });
-$("dlg").addEventListener("click", () => actFor(dialogKid || P1), true); // first, before the dialog's own handlers
+$("dlg").addEventListener("click", () => actFor(dialogKid() || P1), true); // first, before the dialog's own handlers
 $("dlg").addEventListener("click", (e) => { const b = e.target.closest("[data-two]"); if (b) { closeDialog(); startTwo(b.dataset.two); } });
 
 // Ceremonies together (as a former monk in Thailand described them): when one child begins a kneeling ceremony, the
