@@ -167,6 +167,7 @@ print(f"wrote content/site.json and index.html ({len(lessons)} lessons)")
 # what the site serves, and nothing else
 PUBLIC = ["index.html", "world.html", "records.html", "robots.txt", "admin", "content", "src/world.js", "src/sound.js",
           "src/bamboo.js", "img", "assets", "audio", "vendor"]  # vendor/: three.js and three-vrm, published builds, copied as they are
+PUBLIC += sorted(p.relative_to(root).as_posix() for p in (src / "world").rglob("*.js"))  # the modules world.js imports
 dist = root / "dist"
 shutil.rmtree(dist, ignore_errors=True)
 for name in PUBLIC:

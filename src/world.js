@@ -14,23 +14,18 @@ import { Reflector } from "three/addons/objects/Reflector.js";
 import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
 import { createSound } from "./sound.js";
 import { bambooClump } from "./bamboo.js";
+import { read, write, settings, L, tx, txo } from "./world/settings.js";
+import { createTrack } from "./world/analytics.js";
+import { loadGlb, propLoader, loadProp, fitTo, fitModel } from "./world/assets.js";
+import { smooth, smooth as smoothT, inFloor, paveNoise, rockNoise, basisQuat } from "./world/math.js";
 
 /* ---------------- settings shared with the 2D site ---------------- */
-const read = (k, d) => { try { const v = localStorage.getItem("sambodhaya-" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
-const write = (k, v) => { try { localStorage.setItem("sambodhaya-" + k, JSON.stringify(v)); return true; } catch (e) { return false; } };
-const settings = { lang: "th", calmMotion: false, mute: false, guide: true, ...read("settings", {}) };
-// the device asking for less motion turns calm motion on, unless the visitor has chosen for themselves (🍃 in the menu)
-if (read("settings", {}).calmMotion === undefined && matchMedia("(prefers-reduced-motion: reduce)").matches) settings.calmMotion = true;
-// world.html?lang=en (or ?lang=th) chooses the language, and keeps it (the 2D pages read the same setting)
-{ const q = (location.search.match(/[?&]lang=(th|en)\b/) || [])[1]; if (q) { settings.lang = q; write("settings", { ...read("settings", {}), lang: q }); } }
-const L = settings.lang === "en" ? "en" : "th";
-const tx = (th, en) => (L === "en" ? en : th);
+// (read, write, settings and the language, L, tx and txo: src/world/settings.js)
 // What the temple says (hall names, signs, boards, info cards, the stories) lives in content/, edited through /admin;
 // src/build.py joins it into content/site.json. Here only the code: where things stand and how they behave.
 const CONTENT = await fetch("content/site.json", { cache: "no-cache" })
   .then((r) => { if (!r.ok) throw new Error(`content/site.json: ${r.status}`); return r.json(); })
   .catch((e) => { if (window.templeFail) window.templeFail(e); throw e; }); // (world.html then says the temple couldn't open, with a way on)
-const txo = (o) => tx(o.th, o.en); // a {th, en} text in the visitor's language
 document.documentElement.lang = L;
 document.querySelectorAll("[data-th]").forEach((el) => { el.textContent = el.dataset[L]; });
 
@@ -69,25 +64,8 @@ const weak = phone || (touch && (navigator.deviceMemory || 4) <= 4);
 let quality = read("world-quality", read("world-quality-auto", weak ? "light" : "high"));
 const HIGH = quality === "high";
 
-// Anonymous visit counts (netlify/functions/track.mjs): which steps a visit reaches and how long it stays, never who
-// the visitor is. A random id for this browser tab only (sessionStorage, shared with the site's pages), no cookies.
-// Off with Do Not Track or Global Privacy Control, and off away from the live site unless ?track is in the address.
-const track = (() => {
-  const live = /(^|\.)sambodhaya\.netlify\.app$/.test(location.hostname) || /[?&]track\b/.test(location.search);
-  if (!live || navigator.doNotTrack === "1" || navigator.globalPrivacyControl) return () => {};
-  let v = null; try { v = sessionStorage.getItem("sambodhaya-visit"); } catch (e) {}
-  if (!v || !/^[a-z0-9]{8,24}$/.test(v)) { v = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]).join(""); try { sessionStorage.setItem("sambodhaya-visit", v); } catch (e) {} }
-  const t0 = performance.now(), sent = new Set(), q = [], sec = () => Math.round((performance.now() - t0) / 1000);
-  const device = phone ? "phone" : touch ? "tablet" : "desktop";
-  const flush = () => {
-    if (!q.length) return;
-    const body = JSON.stringify({ v, p: "3d", d: device, q: quality, l: settings.lang === "en" ? "en" : "th", e: q.splice(0, 40) });
-    if (!(navigator.sendBeacon && navigator.sendBeacon("/.netlify/functions/track", new Blob([body], { type: "application/json" })))) fetch("/.netlify/functions/track", { method: "POST", body, keepalive: true }).catch(() => {});
-  };
-  setInterval(flush, 15000);
-  addEventListener("visibilitychange", () => { if (document.hidden) { q.push(["hide", sec()]); flush(); } }); // (how long it stayed)
-  return (ev, once = true) => { if (once && sent.has(ev)) return; sent.add(ev); q.push([ev, sec()]); if (q.length >= 20) flush(); };
-})();
+// Anonymous visit counts: src/world/analytics.js
+const track = createTrack({ device: phone ? "phone" : touch ? "tablet" : "desktop", quality });
 track("w_start");
 
 const canvas = document.getElementById("view");
@@ -241,7 +219,6 @@ const colliders = []; // circles {x, z, r}
 const blockers = [];  // rotated boxes {x, z, c, s, hx, hz}
 const floors = [];    // raised floors you can walk onto, as rotated boxes {x, z, c, s, hx, hz, y}
 const camBlock = [];  // meshes the camera must not look through (walls, ceilings)
-const inFloor = (f, x, z) => { const lx = (x - f.x) * f.c - (z - f.z) * f.s, lz = (x - f.x) * f.s + (z - f.z) * f.c; return Math.abs(lx) < f.hx && Math.abs(lz) < f.hz ? lz : null; };
 const groundAt = (x, z) => {
   let y = 0;
   for (const f of floors) {
@@ -253,30 +230,7 @@ const groundAt = (x, z) => {
 const insideHall = (x, z) => floors.some((f) => f.hall && inFloor(f, x, z) != null);
 
 /* ---------------- 3D props made for this temple (assets/models/*.glb) ---------------- */
-// Every model file loads through loadGlb: a failed request is tried again twice (after 1 s and 4 s: on a phone a
-// request now and then just fails), and a file that still won't load is named once in the console. A failure is not
-// remembered, so the next time the model is wanted it is asked for again.
-function loadGlb(loader, url, tries = [1000, 4000]) {
-  return new Promise((res) => loader.load(url, res, undefined, (err) => {
-    if (tries.length) setTimeout(() => loadGlb(loader, url, tries.slice(1)).then(res), tries[0]);
-    else { console.warn("Sambodhaya: couldn't load", url, err && (err.message || err)); res(null); }
-  }));
-}
-// Each prop loads once and is cloned; if a file can't load, the simple shapes stay instead.
-const propLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
-const propCache = {};
-function loadProp(name) {
-  if (!propCache[name]) propCache[name] = loadGlb(propLoader, `assets/models/${name}.glb`).then((g) => { if (!g) delete propCache[name]; return g ? g.scene : null; });
-  return propCache[name];
-}
-// scale a model so its height is h and stand it on the ground at its centre
-function fitTo(obj, h) {
-  const box = new THREE.Box3().setFromObject(obj), size = box.getSize(new THREE.Vector3());
-  obj.scale.setScalar(h / (size.y || 1));
-  const b2 = new THREE.Box3().setFromObject(obj), c = b2.getCenter(new THREE.Vector3());
-  obj.position.set(-c.x, -b2.min.y, -c.z);
-  const holder = new THREE.Group(); holder.add(obj); return holder;
-}
+// (loadGlb, loadProp and fitTo: src/world/assets.js)
 const propJobs = [];
 // place copies of a prop: list of [x, z, rotY, y?]; fallback() runs if the model is missing.
 // Three or more copies are drawn as one InstancedMesh per 45 m patch of ground: one draw call (and one shadow
@@ -500,11 +454,6 @@ const pavingMat = (() => {
 })();
 const srgb = (r, g, b) => new THREE.Color().setRGB(r / 255, g / 255, b / 255, THREE.SRGBColorSpace);
 const STONE = { sand: srgb(196, 180, 154), kerb: srgb(158, 140, 116), bed: srgb(84, 74, 62), algae: srgb(128, 132, 96) };
-const paveNoise = (x, z) => { // smooth value noise: slow patches of wear across the ground
-  const h = (i, j) => { const v = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return v - Math.floor(v); };
-  const i = Math.floor(x), j = Math.floor(z), u = x - i, v = z - j, a = u * u * (3 - 2 * u), b = v * v * (3 - 2 * v);
-  return (h(i, j) * (1 - a) + h(i + 1, j) * a) * (1 - b) + (h(i, j + 1) * (1 - a) + h(i + 1, j + 1) * a) * b;
-};
 function paving(seed) {
   const P = [], N = [], C = [], U = [], J = [], I = [], col = new THREE.Color();
   let s = seed; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
@@ -1785,13 +1734,6 @@ const BIG_BUDDHA_H = 21, BIG_BUDDHA_TURN = -Math.PI / 2; // the great white Budd
 // The cliff: a rugged face of weathered rock in front of the solid core, with uneven ledges and bulges, a skyline
 // that rises and falls, and a recess down the middle that the water falls through, pouring over a rock lip at the
 // top. Big boulders stand at its feet; a rim of stones of every size edges the pool.
-const rockNoise = (() => { // smooth value noise, the same every visit
-  const h = (x, y) => { const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return n - Math.floor(n); };
-  const sm = (t) => t * t * (3 - 2 * t);
-  const v = (x, y) => { const xi = Math.floor(x), yi = Math.floor(y), xf = sm(x - xi), yf = sm(y - yi);
-    const a = h(xi, yi), b = h(xi + 1, yi), c = h(xi, yi + 1), d = h(xi + 1, yi + 1); return a + (b - a) * xf + (c - a) * yf + (a - b - c + d) * xf * yf; };
-  return (x, y) => v(x, y) * 0.55 + v(x * 2.1 + 7, y * 2.1 + 3) * 0.3 + v(x * 4.3 + 1, y * 4.3 + 9) * 0.15;
-})();
 function cliffFace({ w, h, z, notch = 2.7, lipY }) {
   const geo = new THREE.PlaneGeometry(w, h, 110, 52), pos = geo.attributes.position, uv = geo.attributes.uv;
   const sstep = (a, b, t) => { const k = Math.min(1, Math.max(0, (t - a) / (b - a))); return k * k * (3 - 2 * k); };
@@ -4202,7 +4144,6 @@ function rainStep(dt) {
 // visitor's device: day from 6:00 to 18:00 and night otherwise, each change taking the hour around 6:00 and 18:00;
 // the 🌙 button switches by hand for this visit (an eight-second dusk or dawn), until the clock's next change.
 const DAWN = 6 * 60, DUSK = 18 * 60, TWILIGHT = 30; // minutes
-const smoothT = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const clockDay = () => { const n = new Date(), m = n.getHours() * 60 + n.getMinutes() + n.getSeconds() / 60; return smoothT(DAWN - TWILIGHT, DAWN + TWILIGHT, m) * (1 - smoothT(DUSK - TWILIGHT, DUSK + TWILIGHT, m)); };
 const clockNight = () => clockDay() < 0.5;
 // night.d: how much daylight there is now, 1 full day, 0 full night (in between: dawn or dusk)
@@ -4570,13 +4511,6 @@ function stepLoco(dt, speed, mix) {
   L.phase = (L.phase + dt * L.cyc) % g.walk.cycles;
   w.time = L.phase / g.walk.cycles * Dw;
   r.time = (((L.phase % 1) + g.runPhase) % 1) * Dr / g.run.cycles;
-}
-function fitModel(obj, height = 2.9) {
-  const box = new THREE.Box3().setFromObject(obj); const size = box.getSize(new THREE.Vector3());
-  const s = height / (size.y || 1); obj.scale.setScalar(s);
-  const box2 = new THREE.Box3().setFromObject(obj);
-  obj.position.y -= box2.min.y; const c = box2.getCenter(new THREE.Vector3()); obj.position.x -= c.x; obj.position.z -= c.z;
-  obj.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
 }
 function buildBlocky() { setModel(blockyAvatar(avatarCfg, avatarCfg.kind === "photo" ? faceImage : null)); }
 
@@ -5607,7 +5541,6 @@ const WAI_LEVELS = {
   peer:   { tip: 0.12, dur: 2.9, bow: [0.05, 0.05, 0.05, 0.12, 0.10] },
 };
 let wai = { t: -1, dur: 2.9, level: "peer", faceYaw: null, plane: { normal: new THREE.Vector3(), point: new THREE.Vector3(), on: 0 } };
-const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 // which wai fits where he stands: in a shrine hall, to the Buddha image (and he turns to face it); near a monk or a
 // novice (the monk at walking meditation, the novice sweeping, the monks on the alms round), the same high wai,
 // turned to the nearest of them - monks always receive the highest wai; in the caretaker's kuti, to an elder;
@@ -5898,12 +5831,6 @@ function restPose(model) {
   }
   model.userData.restPose = rest;
   return rest;
-}
-// the rotation that turns local axes (a1, a2) onto world axes (b1, b2); a1 ⟂ a2 and b1 ⟂ b2
-function basisQuat(a1, a2, b1, b2) {
-  const a3 = new THREE.Vector3().crossVectors(a1, a2), b3 = new THREE.Vector3().crossVectors(b1, b2);
-  const La = new THREE.Matrix4().makeBasis(a1, a2, a3), Lb = new THREE.Matrix4().makeBasis(b1, b2, b3);
-  return new THREE.Quaternion().setFromRotationMatrix(Lb.multiply(La.transpose()));
 }
 const waiBones = {};
 const WAI_BONES = ["Spine02", "Spine01", "Spine", "neck", "Head", "LeftArm", "LeftForeArm", "LeftHand", "RightArm", "RightForeArm", "RightHand",
