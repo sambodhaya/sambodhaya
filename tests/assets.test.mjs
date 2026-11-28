@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 const THREE = await import("three");
-const { loadGlb, fitTo, fitModel } = await import("../src/world/assets.js");
+const { loadGlb, fitTo, fitModel, setAssetVersions, assetUrl } = await import("../src/world/assets.js");
 
 const near = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} is not ${b}`);
 // a loader that fails `fails` times, then gives `value`
@@ -54,4 +54,21 @@ test("fitModel: the avatar's height, on the ground, centred and casting shadows"
   assert.equal(m.frustumCulled, false);
   const g2 = new THREE.Group(); g2.add(box(1, 3, 1)); fitModel(g2, 1.5);
   near(new THREE.Box3().setFromObject(g2).getSize(new THREE.Vector3()).y, 1.5);
+});
+
+test("assetUrl: a file in the list gets its fingerprint, others keep their path", () => {
+  setAssetVersions({ "models/boy.glb": "abc1234567", "tex/marble_01_diff.webp": "0123456789" });
+  assert.equal(assetUrl("assets/models/boy.glb"), "assets/models/boy.glb?v=abc1234567");
+  assert.equal(assetUrl("assets/tex/marble_01_diff.webp"), "assets/tex/marble_01_diff.webp?v=0123456789");
+  assert.equal(assetUrl("assets/models/new.glb"), "assets/models/new.glb");
+  setAssetVersions(undefined); // (no list: a local preview of the source)
+  assert.equal(assetUrl("assets/models/boy.glb"), "assets/models/boy.glb");
+});
+
+test("loadGlb: asks for the fingerprinted address, also when it tries again", async () => {
+  setAssetVersions({ "models/dog-rig.glb": "feedbeef00" });
+  const l = fakeLoader(1);
+  await loadGlb(l, "assets/models/dog-rig.glb", [0, 0]);
+  assert.deepEqual(l.calls, ["assets/models/dog-rig.glb?v=feedbeef00", "assets/models/dog-rig.glb?v=feedbeef00"]);
+  setAssetVersions({});
 });

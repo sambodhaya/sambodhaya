@@ -151,6 +151,20 @@ if stale:
 # the 3D world
 site = dict(world)
 site["journey"] = [{"code": u["code"], "title": u["title"], "picture": pictures[i]} for i, u in enumerate(lessons)]
+# the fingerprint of every file under assets/ (models, textures): the 3D temple asks for each with ?v=<fingerprint>
+# (assetUrl in src/world/assets.js), so netlify.toml can let browsers keep them for a year, and a changed file gets a
+# new address. (So after changing a model or texture, run the build and commit content/site.json with it.)
+site["assetVersions"] = {p.relative_to(root / "assets").as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()[:10]
+                         for p in sorted((root / "assets").rglob("*")) if p.is_file() and not p.name.startswith(".")}
+# and no code asks for a file under assets/ without it (else that file could be stuck in a visitor's cache for a year)
+for js in [src / "world.js", *sorted((src / "world").rglob("*.js"))]:
+    for n, line in enumerate(js.read_text(encoding="utf-8").splitlines(), 1):
+        code = line.split("//")[0]
+        for m in re.finditer(r"[\"'`]assets/", code):
+            before = code[:m.start()]
+            if not re.search(r"(assetUrl\(|loadGlb\([^,]*,\s*)$", before):
+                sys.exit(f"{js.relative_to(root)}:{n}: a file under assets/ is asked for without assetUrl() "
+                         f"(it would be cached for a year without its fingerprint):\n  {line.strip()}")
 (content / "site.json").write_text(json.dumps(site, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
 # the 2D site

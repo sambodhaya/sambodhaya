@@ -16,7 +16,7 @@ import { createSound } from "./sound.js";
 import { bambooClump } from "./bamboo.js";
 import { read, write, settings, L, tx, txo } from "./world/settings.js";
 import { createTrack } from "./world/analytics.js";
-import { loadGlb, propLoader, loadProp, fitTo, fitModel } from "./world/assets.js";
+import { loadGlb, propLoader, loadProp, fitTo, fitModel, setAssetVersions, assetUrl } from "./world/assets.js";
 import { smooth, smooth as smoothT, inFloor, paveNoise, rockNoise, basisQuat } from "./world/math.js";
 
 /* ---------------- settings shared with the 2D site ---------------- */
@@ -26,6 +26,7 @@ import { smooth, smooth as smoothT, inFloor, paveNoise, rockNoise, basisQuat } f
 const CONTENT = await fetch("content/site.json", { cache: "no-cache" })
   .then((r) => { if (!r.ok) throw new Error(`content/site.json: ${r.status}`); return r.json(); })
   .catch((e) => { if (window.templeFail) window.templeFail(e); throw e; }); // (world.html then says the temple couldn't open, with a way on)
+setAssetVersions(CONTENT.assetVersions); // (every file under assets/ is asked for with its fingerprint: assetUrl)
 document.documentElement.lang = L;
 document.querySelectorAll("[data-th]").forEach((el) => { el.textContent = el.dataset[L]; });
 
@@ -113,7 +114,7 @@ const texCache = {};
 function tex(name, kind, rx, ry) {
   const key = `${name}_${kind}_${rx}_${ry}`;
   if (texCache[key]) return texCache[key];
-  const t = texLoader.load(`assets/tex/${name}_${kind}.${name === "bodhi_bark" ? "jpg" : "webp"}`); // (WebP, a third smaller; the bark's JPEGs are smaller than WebP would be)
+  const t = texLoader.load(assetUrl(`assets/tex/${name}_${kind}.${name === "bodhi_bark" ? "jpg" : "webp"}`)); // (WebP, a third smaller; the bark's JPEGs are smaller than WebP would be)
   t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.anisotropy = HIGH ? 8 : 2;
   if (kind === "diff") t.colorSpace = THREE.SRGBColorSpace;
   return (texCache[key] = t);
@@ -317,7 +318,7 @@ function bamboo(h, list, { extra = false } = {}) {
   const dome = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false }));
   scene.add(dome); skyDome = dome;
   // a real sunset sky (CC0 HDRI) lights every surface; the painted dome stays only if it can't load
-  new RGBELoader().load("assets/tex/belfast_sunset_puresky_1k.hdr", (hdr) => {
+  new RGBELoader().load(assetUrl("assets/tex/belfast_sunset_puresky_1k.hdr"), (hdr) => {
     const pm = new THREE.PMREMGenerator(renderer);
     scene.environment = pm.fromEquirectangular(hdr).texture;
     scene.environmentIntensity = 0.75;
@@ -1276,7 +1277,7 @@ const TEACHER_RIGS = { "monk-elder": "monk-senior", "monk": "monk-middle", "monk
 // the seated monks' fingers, measured on each model (.dev/monk-fingers): per hand, each digit's four points (base
 // knuckle, middle knuckle, last knuckle, tip; the thumb from its root) and the vertices that belong to it
 let seatedFingers = null;
-const seatedFingersReady = fetch("assets/models/monk-fingers.json").then((r) => (r.ok ? r.json() : null)).then((d) => (seatedFingers = d)).catch(() => null);
+const seatedFingersReady = fetch(assetUrl("assets/models/monk-fingers.json")).then((r) => (r.ok ? r.json() : null)).then((d) => (seatedFingers = d)).catch(() => null);
 function loadSeated(file, s, fallback) {
   Promise.all([loadProp(file), seatedFingersReady]).then(([src]) => {
     const J0 = SEATED_JOINTS[file], J = J0 && { ...J0, fingers: seatedFingers && seatedFingers[file] };
@@ -2460,7 +2461,7 @@ const bodhiLeafShape = () => {
   add(mergeGeometries(wood), P("bodhi_bark", 1, 1, { vertexColors: true }), 0, 0, 0);
   // the crown: leaf-spray cards round the twigs' ends, brighter and yellower outside, on top and toward the sun, deep within
   const sunDir = sun.position.clone().normalize(), sunView = new THREE.Vector3(), leafWind = { value: 0 }, day = { value: 1 };
-  const leafSheet = texLoader.load("assets/tex/bodhi_leaves.webp"); leafSheet.colorSpace = THREE.SRGBColorSpace; leafSheet.anisotropy = HIGH ? 8 : 2;
+  const leafSheet = texLoader.load(assetUrl("assets/tex/bodhi_leaves.webp")); leafSheet.colorSpace = THREE.SRGBColorSpace; leafSheet.anisotropy = HIGH ? 8 : 2;
   const crownMat = new THREE.MeshStandardMaterial({ map: leafSheet, alphaTest: 0.42, roughness: 0.5, side: THREE.DoubleSide });
   crownMat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, { uWaterTime: waterTime, uLeafWind: leafWind, uSunView: { value: sunView }, uDay: day });

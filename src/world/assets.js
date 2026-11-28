@@ -2,11 +2,18 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 
+// Every file under assets/ is asked for with its fingerprint (assets/x.glb?v=<hash>), from the list src/build.py
+// writes into content/site.json (assetVersions): the files can then be cached for a year (netlify.toml), and a changed
+// file has a new address, so a visitor never keeps an old copy. A file not in the list (or no list) keeps its plain path.
+let VERSIONS = {};
+export function setAssetVersions(v) { VERSIONS = v || {}; }
+export const assetUrl = (path) => { const h = VERSIONS[path.replace(/^assets\//, "")]; return h ? `${path}?v=${h}` : path; };
+
 // Every model file loads through loadGlb: a failed request is tried again twice (after 1 s and 4 s: on a phone a
 // request now and then just fails), and a file that still won't load is named once in the console. A failure is not
 // remembered, so the next time the model is wanted it is asked for again.
 export function loadGlb(loader, url, tries = [1000, 4000]) {
-  return new Promise((res) => loader.load(url, res, undefined, (err) => {
+  return new Promise((res) => loader.load(assetUrl(url), res, undefined, (err) => {
     if (tries.length) setTimeout(() => loadGlb(loader, url, tries.slice(1)).then(res), tries[0]);
     else { console.warn("Sambodhaya: couldn't load", url, err && (err.message || err)); res(null); }
   }));

@@ -33,8 +33,15 @@
     Content-Security-Policy = "frame-ancestors 'none'"
 
 # vendor/ holds published library builds with the version in the path (three@0.169.0/...), so they never change
-# under the same name. No such long cache for img/, audio/ or assets/: their file names carry no version.
+# under the same name. assets/ (the 3D temple's models and textures) is always asked for with each file's fingerprint
+# (?v=<hash>, from content/site.json, which is never cached; src/build.py checks no code asks without it), so a
+# changed file has a new address and they can be kept a year too. No long cache for img/ or audio/: those carry none.
 [[headers]]
   for = "/vendor/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/assets/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
