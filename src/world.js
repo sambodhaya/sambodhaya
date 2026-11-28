@@ -113,7 +113,7 @@ const texCache = {};
 function tex(name, kind, rx, ry) {
   const key = `${name}_${kind}_${rx}_${ry}`;
   if (texCache[key]) return texCache[key];
-  const t = texLoader.load(`assets/tex/${name}_${kind}.jpg`);
+  const t = texLoader.load(`assets/tex/${name}_${kind}.${name === "bodhi_bark" ? "jpg" : "webp"}`); // (WebP, a third smaller; the bark's JPEGs are smaller than WebP would be)
   t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.anisotropy = HIGH ? 8 : 2;
   if (kind === "diff") t.colorSpace = THREE.SRGBColorSpace;
   return (texCache[key] = t);
@@ -4520,8 +4520,9 @@ const boyReady = {};
 // kit "boy" wears his sneakers; kit "boy-socks" is the same boy in his white socks, for inside the halls (and the
 // same for "girl" and "girl-socks", in her school shoes)
 // Kits with a lighter model for light quality (<kit>-lite.glb: fewer triangles, smaller textures, the same skeleton
-// and walk, made with .dev/tools/refit-character.py)
-const LITE_KITS = new Set(["boy", "boy-socks"]);
+// and walk; the boy's made with .dev/tools/refit-character.py, the girl's with .dev/tools/lite-bake.py and
+// lite-transplant.mjs, which keep her nodes, skin and walk exactly as they are)
+const LITE_KITS = new Set(["boy", "boy-socks", "girl", "girl-socks"]); // (the girl's: the same rig, nodes and walk as hers, only a lighter mesh and baked textures)
 function loadBoy(kit = "boy", copy = 1) {
   // boy.glb holds the model and its walk; the other files hold only an animation for the same skeleton
   const key = copy > 1 ? kit + "#" + copy : kit, model = !HIGH && LITE_KITS.has(kit) ? kit + "-lite" : kit;
@@ -7937,11 +7938,11 @@ function kidStep(dt) {
   if (onBridge(player.x, player.z) && feed.t < 0 && kraap.t < 0 && 2.5 < bestD) { best = fest.now === "loykrathong" ? { id: "bridge", icon: "🪷", th: "ลอยกระทง", en: "Loy Krathong", sub: ["ลอยกระทง · ให้อาหารปลา", "Float a krathong · feed the fish"] } : FISH_PLACE; bestD = 2.5; }
   if (merit.t < 0 && kraap.t < 0) { const mh = meritHere(); if (mh) { best = { ...MERIT[mh.kind].place, merit: mh }; bestD = 0.5; } } // standing at it: the offering comes first
   if (catNear() && 1.9 < bestD) { best = CAT_PLACE; bestD = 1.9; }
-  { // the tool rack: holding a tool, it goes back to its place; empty-handed, the nearer tool is picked up
-    const tools = Math.hypot(player.x - RACK.x, player.z - RACK.z) < 2.4 ? [["broom", BROOM_AT, broom.held, BROOM_PLACE, BROOM_BACK], ["can", CAN_AT, can.held, CAN_PLACE, CAN_BACK]]
-      .map(([id, at, held, take, back]) => ({ id, d: Math.hypot(player.x - at.x, player.z - at.z), held, take, back })).filter((t) => !heldElsewhere(t.id)) : [];
-    const t = tools.find((u) => u.held) || tools.sort((a, b) => a.d - b.d)[0];
-    if (t && 2.3 < bestD) { best = t.held ? t.back : t.take; bestD = 2.3; }
+  if (2.3 < bestD && Math.hypot(player.x - RACK.x, player.z - RACK.z) < 2.4) { // the tool rack: holding a tool, it goes back to its place; empty-handed, the nearer tool is picked up (no arrays: this runs every frame)
+    const bOk = !heldElsewhere("broom"), cOk = !heldElsewhere("can");
+    const bD = Math.hypot(player.x - BROOM_AT.x, player.z - BROOM_AT.z), cD = Math.hypot(player.x - CAN_AT.x, player.z - CAN_AT.z);
+    const pick = bOk && broom.held ? BROOM_BACK : cOk && can.held ? CAN_BACK : bOk && (!cOk || bD <= cD) ? BROOM_PLACE : cOk ? CAN_PLACE : null;
+    if (pick) { best = pick; bestD = 2.3; }
   }
   if (foldHere() && 1.6 < bestD) { best = FOLD_PLACE; bestD = 1.6; }
   if (can.held && can.t < 0) { const w = potHere(); if (w && w.d < bestD) { best = { ...WATER_PLACE, key: w.i }; bestD = w.d; } }
