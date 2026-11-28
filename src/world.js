@@ -1943,15 +1943,89 @@ if (HIGH) {
   });
 }
 
-/* ---------------- my journey: eight stepping stones ---------------- */
+/* ---------------- my journey: a garden path with eight stations ---------------- */
+// A winding garden path of flat, irregular stones set into the grass links the eight stations (U01–U08). Each
+// station is a wider round of paving with its number inlaid in a ring of lotus petals; stand on it to read that
+// story. Beside the path, a trail of small, plain, child-sized footprints walks from station to station, as if a
+// child had gone this way: beside the path, never under the walker's feet, and with no wheel or other mark, so they
+// can't be taken for the Buddha's footprint (Phra Phutthabat), which is venerated and never stepped on.
 const journeyStones = [];
-JOURNEY.forEach(([th, en], i) => {
-  const x = 17 + i * 3.1, z = 45 - Math.sin(i * 0.55) * 6;
-  add(new THREE.CylinderGeometry(1.5, 1.6, 0.35, 28), MAT.rock, x, 0.175, z, scene, false);
-  floors.push({ x, z, c: 1, s: 0, hx: 1.1, hz: 1.1, y: 0.35 }); // stand on the stone, not in it
-  sign(`${i + 1}`, L === "en" ? en : th, "👣", x, 2.2, z, 3.4);
-  journeyStones.push({ x, z, i });
-});
+{
+  const pts = JOURNEY.map((_, i) => new THREE.Vector3(15.5 + i * 4.9, 0, 45 - Math.sin(i * 0.7 + 0.3) * 4.2));
+  const curve = new THREE.CatmullRomCurve3(pts, false, "centripetal");
+  let s0 = 7; const rnd = () => (s0 = (s0 * 16807) % 2147483647) / 2147483647;
+  // the path itself: flat irregular stones along the curve, between the stations' edges
+  const stones = [], col = new THREE.Color();
+  const N = 900; let last = null;
+  for (let k = 0; k <= N; k++) {
+    const u = k / N, q = curve.getPointAt(u);
+    if (pts.some((p) => Math.hypot(q.x - p.x, q.z - p.z) < 1.5)) { last = null; continue; } // (the station is there)
+    if (last && Math.hypot(q.x - last.x, q.z - last.z) < 0.74) continue;
+    last = q.clone();
+    const t = curve.getTangentAt(u), nx = -t.z, nz = t.x, side = (stones.length % 2 ? 1 : -1) * (0.1 + rnd() * 0.16);
+    const r = 0.36 + rnd() * 0.12, g = new THREE.CylinderGeometry(r, r * 1.05, 0.06, 14);
+    const pos = g.attributes.position; // an irregular, rounded outline (a few slow bumps round the edge), like a split flagstone
+    const ph = [rnd() * 6.3, rnd() * 6.3, rnd() * 6.3];
+    for (let v = 0; v < pos.count; v++) { const x = pos.getX(v), z = pos.getZ(v); if (Math.hypot(x, z) < 1e-4) continue; const a = Math.atan2(z, x), j = 0.86 + 0.09 * Math.sin(2 * a + ph[0]) + 0.06 * Math.sin(3 * a + ph[1]) + 0.04 * Math.sin(5 * a + ph[2]); pos.setX(v, x * j); pos.setZ(v, z * j); }
+    g.rotateY(rnd() * Math.PI); g.scale(1.2, 1, 0.85); g.rotateY(Math.atan2(t.x, t.z) + (rnd() - 0.5) * 0.5);
+    g.translate(q.x + nx * side, 0.0, q.z + nz * side);
+    col.setHSL(0.08 + rnd() * 0.04, 0.1 + rnd() * 0.1, 0.62 + rnd() * 0.14);
+    const c = new Float32Array(g.attributes.position.count * 3); for (let v = 0; v < c.length; v += 3) { c[v] = col.r; c[v + 1] = col.g; c[v + 2] = col.b; }
+    g.setAttribute("color", new THREE.BufferAttribute(c, 3));
+    stones.push(g.index ? g.toNonIndexed() : g);
+  }
+  const pathMesh = new THREE.Mesh(mergeGeometries(stones), P("mossy_rock", 0.7, 0.7, { vertexColors: true, color: 0xfff4e4, roughness: 0.95 }));
+  pathMesh.receiveShadow = true; scene.add(pathMesh);
+  // for footsteps (stone), and to keep grass and plants off it: the path as short straight pieces
+  for (let k = 0; k < 64; k++) { const a = curve.getPointAt(k / 64), b = curve.getPointAt((k + 1) / 64); paths.push({ x1: a.x, z1: a.z, x2: b.x, z2: b.z, w: 2.6 }); }
+  // the stations: a round of paving with a darker rim, and the number inlaid in a ring of lotus petals
+  const numTex = (n) => {
+    const c = document.createElement("canvas"); c.width = c.height = 256; const g = c.getContext("2d");
+    g.translate(128, 128);
+    g.fillStyle = "rgba(120, 78, 40, 0.9)";
+    for (let k = 0; k < 12; k++) { g.save(); g.rotate((k / 12) * Math.PI * 2); g.beginPath(); g.moveTo(0, -78); g.quadraticCurveTo(15, -98, 0, -122); g.quadraticCurveTo(-15, -98, 0, -78); g.fill(); g.restore(); }
+    g.beginPath(); g.arc(0, 0, 72, 0, Math.PI * 2); g.lineWidth = 8; g.strokeStyle = "rgba(110, 70, 36, 0.95)"; g.stroke();
+    g.fillStyle = "rgb(74, 46, 22)"; g.font = "700 120px Mali, Itim, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(String(n), 0, 6);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+  };
+  const padMat = P("marble_01", 0.6, 0.6, { color: 0xf3e3c4, roughness: 0.8 }), rimMat = M(0xa8916c);
+  JOURNEY.forEach(([th, en], i) => {
+    const { x, z } = pts[i];
+    add(new THREE.CylinderGeometry(1.3, 1.36, 0.06, 40), rimMat, x, 0.03, z, scene, false).receiveShadow = true;
+    add(new THREE.CylinderGeometry(1.14, 1.14, 0.064, 40), padMat, x, 0.032, z, scene, false).receiveShadow = true;
+    const t = numTex(i + 1), inlay = new THREE.Mesh(new THREE.CircleGeometry(0.62, 40), new THREE.MeshStandardMaterial({ map: t, transparent: true, depthWrite: false, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -2 }));
+    inlay.rotation.x = -Math.PI / 2; inlay.position.set(x, 0.066, z); inlay.receiveShadow = true; scene.add(inlay);
+    document.fonts && document.fonts.ready.then(() => { const c = numTex(i + 1); inlay.material.map = c; inlay.material.needsUpdate = true; t.dispose(); }); // (the number in the site's own font)
+    sign(`${i + 1}`, L === "en" ? en : th, "👣", x, 2.2, z, 3.4);
+    journeyStones.push({ x, z, i });
+  });
+  // the footprints: a child's, small and plain, pressed into the earth beside the path, left and right in turn
+  const footTex = (() => {
+    const c = document.createElement("canvas"); c.width = 64; c.height = 128; const g = c.getContext("2d");
+    g.fillStyle = "#fff";
+    g.beginPath(); g.ellipse(34, 82, 17, 34, 0.1, 0, Math.PI * 2); g.fill(); // the sole
+    g.beginPath(); g.ellipse(30, 108, 13, 15, 0, 0, Math.PI * 2); g.fill(); // the heel
+    [[40, 34, 8.5], [27, 30, 6.5], [17, 34, 5.5], [10, 41, 4.8], [6, 50, 4.2]].forEach(([fx, fy, r]) => { g.beginPath(); g.arc(fx, fy, r, 0, Math.PI * 2); g.fill(); }); // the toes (a left foot: big toe on the right)
+    const t = new THREE.CanvasTexture(c); return t;
+  })();
+  const footMat = new THREE.MeshStandardMaterial({ color: 0x4a3824, alphaMap: footTex, transparent: true, opacity: 0.78, depthWrite: false, roughness: 1, polygonOffset: true, polygonOffsetFactor: -1 });
+  const prints = [];
+  let along = 0, prev = curve.getPointAt(0), step = 0;
+  for (let k = 1; k <= 1200; k++) {
+    const u = k / 1200, q = curve.getPointAt(u); along += Math.hypot(q.x - prev.x, q.z - prev.z); prev = q;
+    if (along < 0.44) continue; along = 0; // (a child's step)
+    const t = curve.getTangentAt(u), nx = -t.z, nz = t.x, lr = step++ % 2 ? 1 : -1, off = 0.86 + lr * 0.09;
+    const fx = q.x + nx * off, fz = q.z + nz * off;
+    if (pts.some((p) => Math.hypot(fx - p.x, fz - p.z) < 1.62)) continue; // (not on a station's paving)
+    prints.push({ x: fx, z: fz, yaw: Math.atan2(t.x, t.z), left: lr < 0 });
+  }
+  const footGeo = (mirror) => { const g = new THREE.PlaneGeometry(0.19, 0.38); g.rotateX(-Math.PI / 2); g.rotateY(Math.PI); if (mirror) g.scale(-1, 1, 1); return g; };
+  [true, false].forEach((left) => {
+    const list = prints.filter((f) => f.left === left), im = new THREE.InstancedMesh(footGeo(!left), footMat, list.length), o = new THREE.Object3D();
+    list.forEach((f, k) => { o.position.set(f.x, 0.012, f.z); o.rotation.set(0, f.yaw, 0); o.updateMatrix(); im.setMatrixAt(k, o.matrix); });
+    im.receiveShadow = true; scene.add(im);
+  });
+}
 
 /* ---------------- gates (enter left, exit right) ---------------- */
 [[-7, txo(CONTENT.signs.welcome), "🚪"], [7, txo(CONTENT.signs.leave), "🚪"]].forEach(([x, label]) => {
@@ -2848,6 +2922,7 @@ const gardenSpots = []; // (for ?debug checks)
     for (let tries = 0; tries < 400 && groves.length < 14; tries++) {
       const a = rnd() * Math.PI * 2, d = 66 + rnd() * 6, x = Math.cos(a) * d, z = Math.sin(a) * d;
       if (z > 40 && Math.abs(x) < 26) continue;                                           // keep the entrance view open
+      if (journeyStones.some((st) => Math.hypot(st.x - x, st.z - z) < 9)) continue;          // (a clump spreads wide: its leaves not over My Journey)
       if (!lawn(x, z, 1.6) || groves.some(([gx, gz]) => Math.hypot(gx - x, gz - z) < 9) || edgeTrees.some(([ex, ez]) => Math.hypot(ex - x, ez - z) < 5)) continue;
       groves.push([x, z, rnd() * 6.28]); colliders.push({ x, z, r: 1.1 });
     }
