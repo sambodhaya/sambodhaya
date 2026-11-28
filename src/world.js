@@ -3519,8 +3519,8 @@ function poseCan(model, B) {
 // speaks or teaches; they are scenery. The monk and the novice are rigged like the boy (the same skeleton), so
 // their hands are posed the same way: the monk's clasped before him, the novice's on his broom.
 const npcLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
-function loadNpc(name, height) {
-  return loadGlb(npcLoader, `assets/models/${name}.glb`)
+function loadNpc(name, height, file = name) { // (file: a lighter model of the same figure; its eyelids and all go by name)
+  return loadGlb(npcLoader, `assets/models/${file}.glb`)
     .then((main) => {
       if (!main) return null;
       const obj = main.scene, holder = new THREE.Group(); holder.add(obj); fitModel(obj, height); scene.add(holder);
@@ -4042,7 +4042,7 @@ function lifeStep(dt) {
 // the rigged monk and novice load after the boy, so his first steps are never delayed
 setTimeout(() => {
   loadNpc("monk-walk", 3.3).then((n) => { if (n) lane.n = n; });
-  loadNpc("novice", 2.95).then((n) => {
+  loadNpc("novice", 2.95, HIGH ? "novice" : "novice-lite").then((n) => { // (novice-lite: light graphics; the same rig, nodes and walk, and every finger triangle)
     if (!n) return; novice.n = n;
     novice.broom = broom.obj.clone(); scene.add(novice.broom);
     // his own broom has a longer handle (he is taller than the boy, and holds it higher up): from the tie to NOVICE_TOP
