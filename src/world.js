@@ -2827,10 +2827,10 @@ const gardenSpots = []; // (for ?debug checks)
   if (HIGH) {
     // ---- marigolds: a low clump of leaves under round orange or yellow flower heads
     const clump = (hr, hg, hb) => {
-      const parts = [], leaf = new THREE.IcosahedronGeometry(0.16, 0), head = new THREE.IcosahedronGeometry(0.075, 1);
+      const parts = [], leaf = new THREE.IcosahedronGeometry(0.16, 0), head = new THREE.IcosahedronGeometry(0.075, 1); // (icosahedra are already non-indexed: no toNonIndexed)
       const paint = (g, r, gg, b) => { const n = g.attributes.position.count; g.setAttribute("color", new THREE.Float32BufferAttribute(new Array(n).fill(0).flatMap(() => [r, gg, b]), 3)); return g; };
-      for (let k = 0; k < 9; k++) { const a = k * 0.7, r = 0.05 + (k % 3) * 0.06; parts.push(paint(leaf.clone().scale(0.45, 0.9, 0.45).translate(Math.cos(a) * r, 0.11 + (k % 2) * 0.03, Math.sin(a) * r).toNonIndexed(), 0.13, 0.32, 0.09)); } // feathery dark-green leaves
-      for (let k = 0; k < 6; k++) { const a = k * 1.05 + 0.3, r = 0.08 + (k % 2) * 0.09; parts.push(paint(head.clone().scale(1, 0.8, 1).translate(Math.cos(a) * r, 0.24 + (k % 3) * 0.03, Math.sin(a) * r).toNonIndexed(), hr, hg, hb)); }
+      for (let k = 0; k < 9; k++) { const a = k * 0.7, r = 0.05 + (k % 3) * 0.06; parts.push(paint(leaf.clone().scale(0.45, 0.9, 0.45).translate(Math.cos(a) * r, 0.11 + (k % 2) * 0.03, Math.sin(a) * r), 0.13, 0.32, 0.09)); } // feathery dark-green leaves
+      for (let k = 0; k < 6; k++) { const a = k * 1.05 + 0.3, r = 0.08 + (k % 2) * 0.09; parts.push(paint(head.clone().scale(1, 0.8, 1).translate(Math.cos(a) * r, 0.24 + (k % 3) * 0.03, Math.sin(a) * r), hr, hg, hb)); }
       const g = mergeGeometries(parts); g.computeVertexNormals(); return g;
     };
     const flowerMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }); sway(flowerMat, 0.6);
